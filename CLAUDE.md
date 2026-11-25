@@ -145,10 +145,7 @@ Bu oturumların commit'leri sırayla: `948a8f7` T5, `95eecd0` noktalama ölçüm
 
 ## Sıradaki işler
 
-1. **Depo temizliği.** `main` → `master` adını sahibi değiştirdi (26 Kasım). Kalan: iki eski dal ve bir oturumun yanlışlıkla yeniden açtığı uzak `main` (içeriği `master`'ın gerisinde, yeni bir şey yok). Sahibi onaylarsa:
-   ```bash
-   git push origin --delete windows-kurulum issue-2-temkinli-duzeltme main
-   ```
+1. ~~Depo temizliği~~ — yapıldı (26 Kasım): varsayılan dal `master`; `windows-kurulum`, `issue-2-temkinli-duzeltme` ve yanlışlıkla açılan `main` silindi (üçü de `master`'ın içindeydi).
 2. ~~T5 ölçümü~~, 3. ~~T5 aday kaynağı~~ — yapıldı, değmedi (yukarıda).
 4. ~~Noktalama için BERT~~ — yapıldı (`--bert`, `noktalama_bert/`). Model GitHub sürümünde: `noktalama-bert-v1` (`noktalama_bert.zip`, SHA-256 `a8e21211...9a87a2`). Modeli yeniden eğitirsen yeni sürüm (v2) aç, README'deki bağlantıyı güncelle.
 5. ~~BERT maskeli dil modeli puanı öznitelik~~ — yapıldı (`siralayici_bert.json`, kapılı).
