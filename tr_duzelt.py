@@ -27,6 +27,7 @@ Kurulum (Python 3.11 ile denendi; zemberek-python NumPy 2 ve Python 3.13 ile ça
 Kullanım:
   python tr_duzelt.py "düzeltilecek metin"                  # noktalama.crfsuite aynı klasörde olmalı
   python tr_duzelt.py --dosya girdi.txt --ayrinti           # yapılan kelime düzeltmelerini de göster
+  python tr_duzelt.py --dosya girdi.txt --eval              # Gemini ile isteğe bağlı, uzaktan değerlendirme
 
   from tr_duzelt import Duzeltici
   d = Duzeltici('noktalama.crfsuite')       # yükleme ~15 sn (dil modeli + morfoloji)
@@ -42,6 +43,8 @@ import math
 import logging
 import argparse
 import warnings
+
+from tr_eval import DEFAULT_MODEL, EvaluationError, evaluate_correction
 
 warnings.filterwarnings('ignore')
 logging.disable(logging.CRITICAL)   # zemberek-python her yüklemede bolca log basıyor
@@ -1005,10 +1008,17 @@ def main():
     ap.add_argument('--dosya')
     ap.add_argument('--model', default=os.path.join(os.path.dirname(os.path.abspath(__file__)), 'noktalama.crfsuite'))
     ap.add_argument('--ayrinti', action='store_true', help='yapılan kelime düzeltmelerini de göster')
+    ap.add_argument('--eval', action='store_true',
+                    help='düzeltmeyi Gemini ile uzaktan değerlendir (metni Google’a gönderir)')
+    ap.add_argument('--eval-model', default=DEFAULT_MODEL,
+                    help='--eval için Gemini model adı (varsayılan: %(default)s)')
     ap.add_argument('--paragraf', action='store_true',
                     help='deneysel paragraf bölmeyi aç (ölçümde rastgeleden iyi çıkmadı)')
     args = ap.parse_args()
     metin = open(args.dosya, encoding='utf-8').read() if args.dosya else (args.metin or sys.stdin.read())
+    api_key = os.environ.get('GEMINI_API_KEY')
+    if args.eval and not api_key:
+        ap.error('--eval için GEMINI_API_KEY ortam değişkenini ayarlayın.')
     d = Duzeltici(args.model)
     sonuc, degisiklikler = d.duzelt(metin, paragraf=args.paragraf, ayrinti=True)
     print(sonuc)
@@ -1016,6 +1026,18 @@ def main():
         print('\n--- kelime düzeltmeleri ---')
         for eski, yeni, kaynak in degisiklikler:
             print('  %-20s -> %-22s [%s]' % (eski, yeni, kaynak))
+    if args.eval:
+        try:
+            evaluation = evaluate_correction(metin, sonuc, api_key, model=args.eval_model)
+        except EvaluationError as exc:
+            ap.exit(1, 'Gemini eval başarısız: %s\n' % exc)
+        print('\n--- Gemini eval (öneridir; çıktı değiştirilmedi) ---')
+        if not evaluation.issues:
+            print('Belirgin bir sorun bulmadı; bu, çıktının doğru olduğunu garanti etmez.')
+        for issue in evaluation.issues:
+            print('  %r -> %r: %s' % (issue.original, issue.corrected, issue.reason))
+            if issue.rule_suggestion:
+                print('    Olası kural (elle doğrula): %s' % issue.rule_suggestion)
 
 
 if __name__ == '__main__':
