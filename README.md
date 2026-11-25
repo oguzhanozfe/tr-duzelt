@@ -1,7 +1,7 @@
 # tr-duzelt
 
-LLM / üretken yapay zekâ kullanmadan Türkçe metin düzeltme: **yazım, noktalama, büyük harf, kesme işareti**.
-Klasik NLP (Zemberek morfolojisi + 2-gram dil modeli) ve küçük bir CRF modeliyle çalışır; yalnızca CPU ister, token harcamaz.
+Türkçe metin düzeltme: **yazım, noktalama, büyük harf, kesme işareti**.
+Ana düzeltme LLM kullanmadan klasik NLP (Zemberek morfolojisi + 2-gram dil modeli) ve küçük bir CRF modeliyle çalışır; yalnızca CPU ister, token harcamaz. İsteğe bağlı `--eval` son çıktıyı Gemini'ye gönderip şüpheli değişiklikleri işaretler; düzeltme metnini değiştirmez.
 
 Bu bir prototiptir: neyi ne kadar yapabildiği ve **yapamadığı** aşağıda ölçümleriyle yazıyor.
 
@@ -79,7 +79,15 @@ python tr_duzelt.py "herkez geldimi bilmiyorum"
 
 python tr_duzelt.py --dosya girdi.txt --ayrinti            # yapılan kelime düzeltmelerini de listeler
 python tr_duzelt.py --dosya girdi.txt --cikti cikti.txt    # sonucu UTF-8 dosyaya yazar
+
+# PowerShell'de yalnızca bu oturum için API anahtarı tanımla, sonra isteğe bağlı eval çalıştır
+$env:GEMINI_API_KEY = "<Google AI Studio API key>"
+python tr_duzelt.py --dosya girdi.txt --eval
 ```
+
+`--eval` varsayılan olarak `gemini-4-hydrogen` kullanır. Bu seçenek verilmedikçe ağ isteği yapılmaz. Eval, hem girdinin tamamını hem düzeltilmiş çıktıyı Google Gemini API'ye gönderir. Google'ın ücretsiz kullanım koşullarında gönderilen içeriklerin ürünleri geliştirmek için kullanılabileceği ve insan incelemesine konu olabileceği belirtiliyor; **kişisel, gizli veya hassas metinleri göndermeyin**. Ücretsiz eval'i yalnızca hassas olmayan geliştirme/test girdilerinde kullanın ve kullanım koşullarını kontrol edin. Bkz. [Gemini API fiyatlandırma/veri kullanımı](https://ai.google.dev/gemini-api/docs/pricing) ve [Gemini API şartları](https://ai.google.dev/gemini-api/docs/terms).
+
+Gemini yalnızca olası sorunları ve kural önerilerini raporlar; metni veya `GOVDE_DUZELT`/`TAM_DUZELT` sözlüklerini otomatik değiştirmez. Bir öneriyi ancak amaçlanan doğru metni elle doğruladıktan sonra kural tabanına ekleyin ve o davranış için regresyon testi yazın. Belirsiz/gürültülü girdilerde eval de hata yapabilir; sonucu kesin doğruluk ölçütü saymayın.
 
 ```python
 from tr_duzelt import Duzeltici
