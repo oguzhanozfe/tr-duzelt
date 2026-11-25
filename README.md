@@ -281,7 +281,7 @@ Bu yol hiçbir adımda yönetici onayı istemez: her şey kullanıcı klasörün
 
 > Düzelticinin Windows'ta (PowerShell, Python 3.11.9) çalıştığı bir kullanıcı testiyle doğrulandı. Aşağıdaki uv adımlarının kendisi Linux'ta denendi. Takıldığınız yer olursa issue açın.
 
-**1. Depoyu indirin.** [ZIP olarak indirip](https://github.com/oguzhanozfe/tr-duzelt/archive/refs/heads/main.zip) bir klasöre açın. Git gerekmez.
+**1. Depoyu indirin.** [ZIP olarak indirip](https://github.com/oguzhanozfe/tr-duzelt/archive/HEAD.zip) bir klasöre açın. Git gerekmez.
 
 **2. uv'yi kurun.** [uv](https://docs.astral.sh/uv/), doğru Python sürümünü kendisi indirip yöneten bir araçtır. Başlat menüsünden PowerShell'i normal şekilde açın ("Yönetici olarak çalıştır" değil) ve şunu çalıştırın:
 
@@ -294,7 +294,7 @@ Bitince pencereyi kapatıp yeni bir PowerShell açın; `uv --version` sürüm ya
 **3. Ortamı kurun.** Zip'i açtığınız, içinde `tr_duzelt.py` bulunan klasöre girin:
 
 ```powershell
-cd $HOME\Downloads\tr-duzelt-main      # klasör sizde farklıysa onu yazın
+cd $HOME\Downloads\tr-duzelt-main      # klasörün adı sizde farklıysa (ör. tr-duzelt-master) onu yazın
 uv venv --python 3.11
 uv pip install -r requirements.txt
 ```
