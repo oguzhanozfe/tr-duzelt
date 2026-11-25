@@ -382,6 +382,17 @@ C_BILINEN_YANLIS = 6.0  # tabloda "yanlış" diye geçen biçimi (orjinal, herke
 C_KONUSMA = 0.8         # konuşma dili -> yazı dili (gidiyodum -> gidiyordum)
 C_AYIR = 2.5            # eksik boşluk (vebeni -> ve beni)
 C_OZEL = 1.0            # özel isim adayına ek ceza
+# --- Temkin ayarları: emin olunmayan kelime olduğu gibi bırakılır (issue #2) ---
+KISA_SINIR = 3          # bu uzunluğa kadarki bilinmeyen kelimeye düzenleme mesafesiyle dokunma (ler, du, ow)
+YABANCI_HARF = frozenset('qwx')   # Türk alfabesinde olmayan harf: kelime büyük olasılıkla yabancı
+OZEL_ADAY_ESIK = -12.5  # yalnızca özel isim olarak çözümlenen adayı kabul için en düşük log-sıklık
+TEK_ADAY_UZUNLUK = 7    # dağarcıkta olmayan (nadir çekimli) adaya ancak kelime uzunsa ve aday tekse güven
+C_ILK_HARF = 1.0        # ilk harfi değiştiren düzeltmeye ek ceza: insanlar ilk harfi nadiren yanlış yazar (cringe -> "ringe" olmasın)
+C_BIRLESTIR = 1.5       # bölünmüş kelimeyi birleştirmek; parçalardan biri tek başına kelime değilken (orma na)
+# İki parça da geçerli kelimeyken (kaybet tik) birleştirmek için dil modelinin en az bu kadar (nat) kazanması gerekir.
+# Ölçüm (40.013 kelimelik temiz metin; 450 yapay bölünme): eşik 8 -> 7 yanlış birleştirme, %84 yakalama;
+# eşik 10 -> 3 "yanlış" (üçü de aslında doğru: arzu su, din le, büyükler den), %80 yakalama; eşik 12 -> 2, %71.
+C_BIRLESTIR_GECERLI = 10.0
 # GEÇERLİ bir kelimeyi bağlam yüzünden başka bir geçerli kelimeyle değiştirmek (yaşam -> yaşım) en
 # riskli iş: yanlış yapılırsa anlam sessizce değişir. Ölçüm (5.681 kelimelik temiz metin + 603 yapay
 # gerçek-kelime hatası; kazanç = dil modeli log-olasılık farkı, nat):
@@ -434,6 +445,7 @@ KISA_KELIMELER = {'ve', 'de', 'da', 'ki', 'bu', 'şu', 'o', 'ne', 'mi', 'mı', '
 
 _AKSAN = {frozenset(p) for p in ('cç', 'gğ', 'ıi', 'oö', 'sş', 'uü')}
 _ASCII = str.maketrans('çğıöşü', 'cgiosu')
+_GOVDE_ASCII = {k: k.translate(_ASCII) for k in GOVDE_DUZELT}
 _BENZER = {frozenset(p) for p in ('bp', 'dt', 'gk', 'kğ', 'yğ', 'sz', 'fv', 'ae', 'ei', 'ıu', 'iü',
                                     'ou', 'öü', 'mn', 'cj')}
 _KLAVYE = set()
@@ -572,6 +584,15 @@ class YazimDuzeltici:
         return konusma, aksan
 
     # ---- aday üretimi ----
+    def tanidik(self, c):
+        """Aday, dil modelinin dağarcığında var mı (büyük derlemde görülmüş bir biçim mi)?
+        Yalnızca özel isim olarak çözümlenenler ayrıca yeterince sık olmalı (bogut, çitmen elensin)."""
+        if self.lm.idx(c) == 0:
+            return False
+        if "'" in c or not self.duzgun(c):
+            return self.lm.tekli(c) >= OZEL_ADAY_ESIK
+        return True
+
     def adaylar(self, w):
         """{aday(lar) demeti: (maliyet, kaynak)}"""
         C = {}
@@ -588,11 +609,13 @@ class YazimDuzeltici:
 
         if w in self.tam:
             ekle(self.tam[w], C_SOZLUK, 'sözlük')
+        wa = w.translate(_ASCII)
         for yanlis, dogru in GOVDE_DUZELT.items():
-            if w.startswith(yanlis):
+            tam_eslesme = w.startswith(yanlis)
+            if tam_eslesme or (not gecerli and wa.startswith(_GOVDE_ASCII[yanlis])):   # sarz -> şarj
                 aday = (dogru + w[len(yanlis):]).split()
                 if all(self.gecerli(t) for t in aday):
-                    ekle(aday, C_SOZLUK, 'sözlük')
+                    ekle(aday, C_SOZLUK + (0.0 if tam_eslesme else 0.8), 'sözlük')
                     # çözümleyici/dil modeli bu yanlışı "geçerli" sayabiliyor (derlemde çok geçtiği için)
                     C[(w,)] = (max(C[(w,)][0], C_BILINEN_YANLIS), 'aynı')
         if w in KONUSMA_GECERLI:
@@ -600,16 +623,33 @@ class YazimDuzeltici:
         if gecerli:
             return C
 
+        kisa = len(w) <= KISA_SINIR
         konusma, aksan = self.konusma_dili(w)
         for c in konusma:
             ekle(c, C_KONUSMA, 'konuşma dili')
         for c in aksan:
-            ekle(c, min(duzenleme_maliyeti(w, c), C_AKSAN_TAVAN), 'aksan')
-        for c in self.oneriler(w):
-            if len(c) == len(w) and sum(x != y for x, y in zip(w, c)) == 1 and \
-                    any(x == 'ğ' and y == 'k' for x, y in zip(w, c)):
-                continue        # buçuğu -> "buçuku": çözümleyicinin tanımadığı yumuşama, hata değil
-            ekle(c, duzenleme_maliyeti(w, c) + (C_OZEL if "'" in c else 0.0), 'yazım')
+            # kısa kelimede (du -> dü) ancak aday belirgin biçimde daha sıksa
+            if self.tanidik(c) and (not kisa or self.lm.tekli(c) >= self.lm.tekli(w) + 2.0):
+                ekle(c, min(duzenleme_maliyeti(w, c), C_AKSAN_TAVAN), 'aksan')
+        # Düzenleme mesafesi adayları. Kısa ya da yabancı görünen kelimelerde komşu kelime sayısı çok
+        # fazla ve hepsi "olası" görünür; oralarda tahmin yürütmek yerine kelimeyi koruyoruz.
+        if not kisa:
+            ham = [c for c in self.oneriler(w)
+                   if not (len(c) == len(w) and sum(x != y for x, y in zip(w, c)) == 1
+                           and any(x == 'ğ' and y == 'k' for x, y in zip(w, c)))]   # buçuğu -> "buçuku" değil
+            if YABANCI_HARF & set(w):
+                # q/w/x Türkçe bir kelimede ancak komşu tuşa kayma olabilir (yqrdım -> yardım, otellwri -> otelleri).
+                # Bunun dışındaki her durumda kelime yabancıdır (what, show, follow) ve korunur.
+                ham = [c for c in ham if len(c) == len(w) and all(
+                    x == y or (x in YABANCI_HARF and frozenset((x, y)) in _KLAVYE) for x, y in zip(w, c))]
+            secilen = [c for c in ham if self.tanidik(c)]
+            if not secilen and len(w) >= TEK_ADAY_UZUNLUK:
+                duzgunler = [c for c in ham if "'" not in c and self.duzgun(c)]
+                if len(duzgunler) == 1:
+                    secilen = duzgunler            # uzun kelime + tek aday: nadir çekimli biçim
+            for c in secilen:
+                ekle(c, duzenleme_maliyeti(w, c) + (C_OZEL if "'" in c else 0.0)
+                     + (C_ILK_HARF if c[0] != w[0] else 0.0), 'yazım')
         m = _SORU_EKI.match(w)                               # gelcekmisin -> gelecek misin
         if m and len(m.group(1)) >= 3 and not self.duzgun(m.group(1)):
             for c in self.konusma_dili(m.group(1))[0]:
@@ -619,38 +659,98 @@ class YazimDuzeltici:
             a, b = w[:k], w[k:]
             if (len(a) < 3 and a not in KISA_KELIMELER) or (len(b) < 3 and b not in KISA_KELIMELER):
                 continue
-            if self.duzgun(a) and self.duzgun(b) and self.lm.idx(a) > 0 and self.lm.idx(b) > 0:
+            if self.duzgun(a) and self.duzgun(b) and self.lm.var(a, b):   # ikili derlemde görülmüş olmalı
                 ekle((a, b), C_AYIR, 'ayırma')
         return C
 
-    # ---- çözümleme: Viterbi ----
-    def duzelt(self, kelimeler):
+    def birlesim_adaylari(self, a, b, on='<s>', art='</s>'):
+        """Yanlışlıkla bölünmüş kelime: 'orma na' -> ormana, 'bogul du' -> boğuldu, 'herkez ler' -> herkesler.
+        on/art: çiftin iki yanındaki kelimeler (bağlam kanıtı için). Döndürür: {(birleşik biçim,): (maliyet, kaynak)}
+
+        Ne kadar kanıt istendiği, parçaların ne olduğuna bağlı (ölçüm: 15.734 kelimelik temiz metin + 1.128 yapay bölünme):
+          - iki parça da kelime değil (orma na)        -> birleşik biçimin geçerli bir kelime olması yeter
+          - biri kelime (son ra)                       -> birleşik biçim ayrıca derlemde görülmüş olmalı
+          - parçalardan biri ve/de/mi/bu... (bro ve)   -> birleşik biçim iki komşusuyla da derlemde görülmüş olmalı
+          - ikisi de kelime (kaybet tik)               -> yalnızca dil modeli çok isterse (C_BIRLESTIR_GECERLI)
+          - tek harfli parça (i de)                    -> hiç birleştirme"""
+        if not (a.isalpha() and b.isalpha()) or len(a) < 2 or len(b) < 2:
+            return {}
+        j = a + b
+        da, db = self.duzgun(a), self.duzgun(b)
+        ikisi_de_kelime = da and db
+        taban = C_BIRLESTIR_GECERLI if ikisi_de_kelime else C_BIRLESTIR
+        islev = a in KISA_KELIMELER or b in KISA_KELIMELER
+
+        def kabul(c):
+            if (da or db) and self.lm.idx(c) == 0:
+                return False
+            if islev and not ikisi_de_kelime and not (self.lm.var(on, c) and self.lm.var(c, art)):
+                return False
+            return True
+
+        C = {}
+        if self.duzgun(j):
+            if kabul(j):
+                C[(j,)] = (taban, 'birleştirme')
+            return C
+        for yanlis, dogru in GOVDE_DUZELT.items():           # herkezler -> herkesler
+            if j.startswith(yanlis):
+                aday = (dogru + j[len(yanlis):]).split()
+                if len(aday) == 1 and self.duzgun(aday[0]) and kabul(aday[0]):
+                    C[(aday[0],)] = (taban + C_SOZLUK, 'birleştirme')
+        konusma, aksan = self.konusma_dili(j)
+        for c in konusma:
+            if self.tanidik(c) and kabul(c):
+                C.setdefault((c,), (taban + C_KONUSMA, 'birleştirme'))
+        for c in aksan:                                      # boguldu -> boğuldu
+            if self.tanidik(c) and kabul(c):
+                C.setdefault((c,), (taban + 0.8, 'birleştirme'))
+        return C
+
+    # ---- çözümleme: Viterbi (tek kelimelik ve iki kelimeyi birleştiren kenarlarla) ----
+    def duzelt(self, kelimeler, birlesebilir=None):
         """kelimeler: küçük harfli kelime listesi (bir cümle/parça).
-        Döndürür: her kelime için (yeni_kelimeler_demeti, kaynak)"""
-        if not kelimeler:
+        birlesebilir[i]: i. ve (i+1). kelime arasında yalnızca boşluk var mı (birleştirme adayı olabilir mi).
+        Döndürür: her kelime için (yeni_kelimeler_demeti, kaynak). İki kelime birleştirildiyse ilki için
+        boş demet, ikincisi için birleşik biçim döner."""
+        n = len(kelimeler)
+        if not n:
             return []
         lm = self.lm
-        aday_listesi = [self.adaylar(w) for w in kelimeler]
-        onceki = {('<s>',): (0.0, None)}
-        izler = []
-        for C in aday_listesi:
-            simdiki = {}
-            for c, (maliyet, _) in C.items():
-                ic = sum(lm.lp(c[k - 1], c[k]) for k in range(1, len(c)))
-                en_iyi, geri = -1e18, None
-                for p, (ps, _) in onceki.items():
-                    s = ps + lm.lp(p[-1], c[0])
-                    if s > en_iyi:
-                        en_iyi, geri = s, p
-                simdiki[c] = (en_iyi + ic - maliyet, geri)
-            izler.append(simdiki)
-            onceki = simdiki
-        son = max(onceki.items(), key=lambda kv: kv[1][0] + lm.lp(kv[0][-1], '</s>'))[0]
-        yol = [son]
-        for i in range(len(izler) - 1, 0, -1):
-            yol.append(izler[i][yol[-1]][1])
-        yol.reverse()
-        sonuc = [(c, aday_listesi[i][c][1]) for i, c in enumerate(yol)]
+        tek = [self.adaylar(w) for w in kelimeler]
+        cift = [{} for _ in range(n)]
+        for i in range(n - 1):
+            if birlesebilir is None or birlesebilir[i]:
+                cift[i] = self.birlesim_adaylari(kelimeler[i], kelimeler[i + 1],
+                                                 kelimeler[i - 1] if i else '<s>',
+                                                 kelimeler[i + 2] if i + 2 < n else '</s>')
+        # en_iyi[i]: ilk i kelime tüketildikten sonra {son belirteç: (skor, geri işaret)}
+        en_iyi = [dict() for _ in range(n + 1)]
+        en_iyi[0]['<s>'] = (0.0, None)
+        for i in range(n):
+            for adaylar_, adim in ((tek[i], 1), (cift[i], 2)):
+                for c, (maliyet, kaynak) in adaylar_.items():
+                    ic = sum(lm.lp(c[k - 1], c[k]) for k in range(1, len(c)))
+                    skor, onceki = -1e18, None
+                    for sonb, (ps, _) in en_iyi[i].items():
+                        v = ps + lm.lp(sonb, c[0])
+                        if v > skor:
+                            skor, onceki = v, sonb
+                    skor += ic - maliyet
+                    hedef = en_iyi[i + adim]
+                    if c[-1] not in hedef or skor > hedef[c[-1]][0]:
+                        hedef[c[-1]] = (skor, (i, onceki, c, kaynak, adim))
+        durum = max(en_iyi[n].items(), key=lambda kv: kv[1][0] + lm.lp(kv[0], '</s>'))[0]
+        sonuc = [None] * n
+        i = n
+        while i > 0:
+            pi, onceki, c, kaynak, adim = en_iyi[i][durum][1]
+            if adim == 1:
+                sonuc[pi] = (c, kaynak)
+            else:
+                sonuc[pi] = ((), kaynak)
+                sonuc[pi + 1] = (c, kaynak)
+            i, durum = pi, onceki
         return self._gercek_kelime(sonuc)
 
     def gercek_kelime_adayi(self, on, w, art):
@@ -931,15 +1031,23 @@ class Duzeltici:
             for i in parca:
                 s = sayi_eki_duzelt(kucuk[i]) if kucuk[i][0].isdigit() else None
                 girdi.append(s or kucuk[i])
-            # kullanıcının büyük yazdığı ve çözümlenemeyen kelimelere (yabancı ad vb.) dokunma
-            cikti = self.yazim.duzelt(girdi)
-            for i, g, (c, kaynak) in zip(parca, girdi, cikti):
+            # iki kelime ancak aralarında yalnızca boşluk varsa ve kullanıcı ikisini de küçük yazdıysa birleşebilir
+            birlesebilir = [bool(_YALNIZ_BOSLUK.fullmatch(ayraclar[i + 1]))
+                            and not kullanici_buyuk[i] and not kullanici_buyuk[i + 1]
+                            for i in parca[:-1]]
+            cikti = self.yazim.duzelt(girdi, birlesebilir)
+            for k, (i, g, (c, kaynak)) in enumerate(zip(parca, girdi, cikti)):
+                # kullanıcının büyük yazdığı ve çözümlenemeyen kelimelere (yabancı ad vb.) dokunma
                 if kullanici_buyuk[i] and not self.yazim.gecerli(kucuk[i]) and kaynak != 'aynı':
                     c, kaynak = (g,), 'aynı'
                 if g != kucuk[i] and kaynak == 'aynı':
                     kaynak = 'sayı eki kuralı'
                 yeni[i] = c
-                if ' '.join(c) != kucuk[i]:
+                if not c:
+                    continue                    # sonraki kelimeyle birleştirildi; kaydı o kelime düşer
+                if kaynak == 'birleştirme':
+                    degisiklikler.append((kelimeler[parca[k - 1]] + ' ' + kelimeler[i], ' '.join(c), kaynak))
+                elif ' '.join(c) != kucuk[i]:
                     degisiklikler.append((kelimeler[i], ' '.join(c), kaynak))
             del parca[:]
 
