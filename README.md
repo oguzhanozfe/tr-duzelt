@@ -241,7 +241,14 @@ python olcum/hata_turleri.py                          # hangi tür hataların ka
 | Roman (13,2 bin kelime) | 0,760 | 0,194 | 0,580 | 0,584 |
 | Öğrenci yazıları, alan dışı (88 bin kelime) | 0,660 | 0,218 | 0,507 | – |
 
-Kıyas için: BERT tabanlı bir model kendi test kümesinde nokta için 0,96, virgül için 0,63 bildiriyor ([model kartı](https://huggingface.co/uygarkurt/bert-restore-punctuation-turkish)). Test kümeleri farklı, birebir karşılaştırma değil; ama farkın yönü açık.
+Bu tablo eğitim betiğinin kendi ayırdığı belgelerden. Her yöntemi **aynı** veride ölçmek için ayrı bir betik var: `python olcum/noktalama_olc.py`. Verisi UD Turkish-IMST'nin geliştirme ve test bölümleri (16 bin kelime); bu veriyle hiçbir model eğitilmedi. Sonuçlar (F1, test bölümü):
+
+| Yöntem | Nokta | Virgül | Soru işareti |
+|---|---|---|---|
+| Bizim CRF (düzelticinin kullandığı ayarlarla) | 0,675 | 0,079 | 0,341 |
+| Hazır BERT modeli ([uygarkurt/bert-restore-punctuation-turkish](https://huggingface.co/uygarkurt/bert-restore-punctuation-turkish)) | 0,276 | 0,300 | 0,171 |
+
+Hazır BERT modeli kendi model kartında nokta için 0,96 bildiriyor ama burada cümle sonlarının çoğuna nokta yerine virgül koyuyor (`güzeldi, dışarı çıktık, sonra eve döndük,`). Bu haliyle kullanılamaz. Bizim CRF'in virgülü düşük çünkü düzeltici onu bilerek çok temkinli çalıştırıyor: yalnızca çok emin olduğu yere virgül koyuyor.
 
 ## Yapamadıkları
 
