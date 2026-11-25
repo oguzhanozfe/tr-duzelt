@@ -70,7 +70,10 @@ class TrDuzelt:
                 gecici = '%s.%d.tmp' % (yol, os.getpid())
                 with open(gecici, 'wb') as f:
                     pickle.dump(tuple(getattr(self.yazim, a) for a in alanlar), f)
-                os.replace(gecici, yol)
+                try:
+                    os.replace(gecici, yol)
+                except OSError:                    # Windows: başka süreç aynı anda yazıyor; önbellek kaybı zararsız
+                    os.remove(gecici)
         atexit.register(yaz)
 
     def gecerli(self, w):

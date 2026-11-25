@@ -623,8 +623,10 @@ class BertPuan:
             maske = torch.tensor([[1] * len(m) + [0] * (uz - len(m)) for m in parti], device=self.cihaz)
             sira = torch.arange(len(parti), device=self.cihaz)
             with torch.no_grad():
-                lg = self.model(input_ids=x, attention_mask=maske).logits
-                lg = lg[sira, torch.tensor([h[1] for h in hb], device=self.cihaz)].float().log_softmax(-1)
+                # kelime dağarcığı katmanını (32 bin çıkış) yalnızca maskeli konumda çalıştır: bellek ve süre kazancı
+                gizli = self.model.bert(input_ids=x, attention_mask=maske)[0]
+                gizli = gizli[sira, torch.tensor([h[1] for h in hb], device=self.cihaz)]
+                lg = self.model.cls(gizli).float().log_softmax(-1)
                 lp = lg[sira, torch.tensor([h[2] for h in hb], device=self.cihaz)]
             for (no, _, _), v in zip(hb, lp.tolist()):
                 pll[no][0] += v
