@@ -58,7 +58,7 @@ GİRDİ
 2. DURAK: her kelime için adaylar üret, en uygununu seç
   (yalnızca birden çok seçeneği olan ya da tanınmayan kelimeler gösteriliyor)
   bugun            -> bugün              [aksan]  adaylar: bugün (aksan)
-  mayista          -> mayıs'ta           [yazım]  adaylar: mayısta (aksan), mayıs'ta (yazım)
+  mayista          -> mayıs'ta           [yazım]  adaylar: mayısta (aksan), mayıs'ta (yazım), mayıs da (ayırma)
   bulustuk         -> buluştuk           [aksan]  adaylar: buluştuk (aksan)
   tatlımmm         -> tatlım             [konuşma dili]  adaylar: tatlım (konuşma dili)
   cok              -> çok                [aksan]  adaylar: çok (aksan), çök (tablo)
@@ -269,7 +269,7 @@ Sonuç (gerçek tweetler, test):
 | `--temkinli` (eşik 0,9) | %66,0 | %1,9 | %0,12 |
 | `--bert --temkinli` | %68,9 | %1,8 | %0,13 |
 
-Yapay testlerde fark daha açık: cümlede tek yazım hatası %84'ten %89'a, üç yazım hatası %85'ten %90'a.
+`--bert` aynı yanlış oranında daha çok düzeltir. Test tweetlerinde bozulan doğru kelime biraz daha yüksek (%0,35'e karşı %0,27), geliştirme tweetlerinde ise daha düşük (%0,26'ya karşı %0,36). Fark ölçüm gürültüsü kadar. Yapay testlerde düzeltmedeki fark daha açık: cümlede tek yazım hatası %84'ten %89'a, üç yazım hatası %85'ten %90'a.
 
 **Ekran kartı gerekmez.** İşlemcide kelime seçimindeki BERTurk otomatik olarak 8 bitlik tam sayı hesabına geçer: 1,7 kat hızlı, sonuç aynı (geliştirme tweetlerinde %74,8 / %2,9 / %0,28). Tek çekirdekte kelime seçimi saniyede ~65 kelime (aynı ölçümde BERT'siz ~440), noktalama ~300 kelime. Ekran kartı varsa kendiliğinden kullanılır.
 
@@ -383,7 +383,7 @@ python tr_duzelt.py --toplu dokum.txt --cikti duzeltilmis.txt --bert       # BER
 
 - Girdideki her satıra çıktıda tam bir satır karşılık gelir. Bir satırda beklenmedik bir hata olursa o satır olduğu gibi yazılır, iş durmaz.
 - Yarıda kalırsa (elektrik, Ctrl+C) aynı komutu yeniden çalıştırın: çıktıda bitmiş satırlar atlanır, kalan yerden devam eder.
-- Her süreç ~2 GB bellek tutar. İlerleme ve tahmini kalan süre ekrana yazılır.
+- Her süreç varsayılan kipte ~1 GB, `--bert` ile ~2,5 GB bellek tutar. İlerleme ve tahmini kalan süre ekrana yazılır.
 
 Ölçülen süreler. Girdi: 2.000 gerçek tweet, satır başına ortalama 8,5 kelime. İlk geçiş, önbellek soğukken. 32 çekirdekli bir masaüstü, ekran kartı kapalı:
 
@@ -395,7 +395,7 @@ python tr_duzelt.py --toplu dokum.txt --cikti duzeltilmis.txt --bert       # BER
 
 Metinleriniz daha uzunsa süre kelime sayısıyla orantılı uzar (8 süreçle saniyede ~200 kelime).
 
-Kendi yazdığımız 20 düzeltilmemiş metin ve iki kipin çıktısı `ornekler/` klasöründe (`girdi.txt`, `cikti.txt`, `cikti_bert.txt`). Bir kaçı:
+Kendi yazdığımız 20 düzeltilmemiş metin ve iki kipin çıktısı `ornekler/` klasöründe (`girdi.txt`, `cikti.txt`, `cikti_bert.txt`). Bu metinler bu sürümde eklenen kuralları (`olum`, `ordayim`, `hersey`, `giriyorm`, `bi kac`) göstermek için yazıldı; asıl kanıt yukarıdaki gerçek tweet testi. `cikti_bert.txt` depoda olmayan `noktalama_bert/` modeliyle üretildi. Bir kaçı:
 
 | Girdi | Varsayılan | `--bert` |
 |---|---|---|

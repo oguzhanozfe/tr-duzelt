@@ -1841,7 +1841,7 @@ def toplu_duzelt(girdi, cikti, model, isci=None, bert=False, cikti_akisi=sys.std
     print('%d satır; %d tanesi zaten düzeltilmiş, %d kaldı' % (len(satirlar), bitmis, len(kalan)), file=cikti_akisi)
     if not kalan:
         return
-    isci = isci or max(1, min((os.cpu_count() or 2) - 1, 8))     # her süreç ~1,5-2 GB bellek tutar (Zemberek + dil modeli)
+    isci = isci or max(1, min((os.cpu_count() or 2) - 1, 8))     # süreç başına ~1 GB (--bert ile ~2,5 GB)
     # torch (BERT kipi) her süreçte bütün çekirdekleri kullanmaya kalkmasın
     os.environ.setdefault('OMP_NUM_THREADS', str(max(1, (os.cpu_count() or 2) // isci)))
     t0 = time.time()
@@ -1880,13 +1880,13 @@ def main():
     ap.add_argument('--toplu', metavar='DOSYA',
                     help='büyük döküm: her satırı ayrı metin olarak düzelt, --cikti dosyasına satır satır yaz '
                          '(yarıda kalırsa aynı komutla kaldığı yerden sürer)')
-    ap.add_argument('--isci', type=int, help='--toplu için paralel süreç sayısı (varsayılan: çekirdek sayısı - 1, en çok 8; süreç başına ~2 GB bellek)')
+    ap.add_argument('--isci', type=int, help='--toplu için paralel süreç sayısı (varsayılan: çekirdek sayısı - 1, en çok 8; süreç başına ~1 GB, --bert ile ~2,5 GB)')
     ap.add_argument('--esik', type=float,
                     help='sıralayıcının eşiği (0-1): yükseldikçe daha az ama daha emin düzeltir (TR_DUZELT_ESIK ile aynı)')
     ap.add_argument('--temkinli', action='store_true',
                     help='yalnızca çok emin olduğunu düzelt (eşik 0,9): yanlış düzeltme ~%%2, düzeltilen biraz azalır')
     ap.add_argument('--bert', action='store_true',
-                    help="kelime seçiminde BERTurk'ün cümle bağlamına da bak (daha az yanlış düzeltme; torch ister)")
+                    help="kelime seçiminde BERTurk'ün cümle bağlamına da bak (aynı yanlış oranında daha çok düzeltir; torch ister)")
     ap.add_argument('--paragraf', action='store_true',
                     help='deneysel paragraf bölmeyi aç (ölçümde rastgeleden iyi çıkmadı)')
     args = ap.parse_args()
