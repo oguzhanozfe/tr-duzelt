@@ -463,6 +463,29 @@ for _r, _row in enumerate(_SATIR):
                     _KLAVYE.add(frozenset((_ch, _SATIR[_r + 1][_j])))
 
 
+_TEKRAR = re.compile(r'(.)\1+')
+
+
+def _uzatmasiz(w, cift_harf=True):
+    """Vurgu için uzatılmış harflerin kısaltılmış biçimleri: tatlımmm -> tatlım, yaaa -> ya,
+    dikkattt -> dikkat. İki kez yazılmış harf Türkçede olağan olduğu için (dikkat, saat) her tekrar
+    için hem tek hem çift harfli biçim denenir; en çok 8 biçim döner.
+    cift_harf=False: yalnızca üç ve daha fazla tekrar kısaltılır (mood -> "mod" olmasın)."""
+    parcalar, secenekler, son = [], [], 0
+    for m in _TEKRAR.finditer(w):
+        parcalar.append(w[son:m.start()])
+        n = m.end() - m.start()
+        secenekler.append((m.group(1), ((2, 1) if cift_harf else (2,)) if n == 2 else (1, 2)))
+        son = m.end()
+    if not secenekler or len(secenekler) > 3:
+        return []
+    kuyruk = w[son:]
+    out = ['']
+    for bas, (harf, sayilar) in zip(parcalar, secenekler):
+        out = [o + bas + harf * k for o in out for k in sayilar]
+    return [o + kuyruk for o in out if o + kuyruk != w]
+
+
 def _degistir(a, b):
     p = frozenset((a, b))
     if p in _AKSAN:
@@ -554,39 +577,47 @@ class YazimDuzeltici:
             self._oneri[w] = v
         return v
 
-    def konusma_dili(self, w):
+    def konusma_dili(self, w, cift_harf=True):
         """Döndürür: (konuşma dili adayları, yalnız-aksan adayları)
-        gidiyodum -> gidiyordum, istiodum -> istiyordum, gelcem -> geleceğim | tartismayi -> tartışmayı"""
+        gidiyodum -> gidiyordum, istiodum -> istiyordum, gelcem -> geleceğim, tatlımmm -> tatlım
+        | tartismayi -> tartışmayı, benım -> benim
+        cift_harf=False: iki kez yazılmış harfi uzatma sayma (bkz. _uzatmasiz)."""
+        wa = w.translate(_ASCII)
         bicimler = [w]
-        w2 = re.sub(r'([ıiuü])o', r'\1yo', w)          # istiodum -> istiyodum
-        if w2 != w:
-            bicimler.append(w2)
-        w3 = re.sub(r'([ıiuü])yc([ae])', r'\1c\2', w)   # yapiycaz -> yapicaz (-> yapacağız)
-        if w3 != w:
-            bicimler.append(w3)
+        for f in (re.sub(r'([ıiuü])o', r'\1yo', w),            # istiodum -> istiyodum
+                  re.sub(r'([ıiuü])yc([ae])', r'\1c\2', w),    # yapiycaz -> yapicaz (-> yapacağız)
+                  wa,                                            # benım -> benim (yanlış yerde ı)
+                  *_uzatmasiz(w, cift_harf)):                    # tatlımmm -> tatlım, yaaa -> ya
+            if f not in bicimler:
+                bicimler.append(f)
         konusma, aksan = [], []
         for f in bicimler:
-            if f != w and self.gecerli(f):
-                konusma.append(f)
+            yalniz_aksan = f == w or f == wa
+            fa = f.translate(_ASCII)
+            if f != w and self.gecerli(f) and f not in (aksan if yalniz_aksan else konusma):
+                (aksan if yalniz_aksan else konusma).append(f)
             for a in self.gayriresmi.analyze(f):
                 if a.is_unknown():
                     continue
                 try:
-                    if a.contains_informal_morpheme():
+                    gayriresmi = a.contains_informal_morpheme()
+                    if gayriresmi:
                         r = self.cevirici.convert(f, a)
                         yuzeyler = [r.surface] if r is not None else []
-                        hedef = konusma
                     else:
                         yuzeyler = [r.surface for r in
                                     self.morph.word_generator.generate(item=a.item, morphemes=a.get_morphemes())]
-                        hedef = aksan
                 except Exception:
                     continue
+                hedef = konusma if (gayriresmi or not yalniz_aksan) else aksan
                 for y in yuzeyler:
                     y = tr_lower(y)
-                    if y != w and y not in hedef and self.gecerli(y):
-                        hedef.append(y)
-        aksan = [y for y in aksan if y.translate(_ASCII) == w.translate(_ASCII) and y not in konusma]
+                    if y == w or y in hedef or not self.gecerli(y):
+                        continue
+                    if not gayriresmi and y.translate(_ASCII) != fa:
+                        continue                  # çözümleyicinin ürettiği biçim yalnızca Türkçe karakterde farklı olmalı
+                    hedef.append(y)
+        aksan = [y for y in aksan if y not in konusma]
         return konusma, aksan
 
     # ---- aday üretimi ----
@@ -626,17 +657,24 @@ class YazimDuzeltici:
                     C[(w,)] = (max(C[(w,)][0], C_BILINEN_YANLIS), 'aynı')
         if w in KONUSMA_GECERLI:
             ekle(KONUSMA_GECERLI[w], C_KONUSMA, 'konuşma dili')
-        if gecerli:
+        if gecerli and self.duzgun(w):
             return C
 
         kisa = len(w) <= KISA_SINIR
-        konusma, aksan = self.konusma_dili(w)
+        # özel isim olarak geçerli bir kelimede çift harf büyük olasılıkla kelimenin kendisidir (mood, emma)
+        konusma, aksan = self.konusma_dili(w, cift_harf=not gecerli)
         for c in konusma:
-            ekle(c, C_KONUSMA, 'konuşma dili')
+            if self.duzgun(c) or self.tanidik(c):
+                ekle(c, C_KONUSMA, 'konuşma dili')
         for c in aksan:
             # kısa kelimede (du -> dü) ancak aday belirgin biçimde daha sıksa
             if self.tanidik(c) and (not kisa or self.lm.tekli(c) >= self.lm.tekli(w) + 2.0):
                 ekle(c, min(duzenleme_maliyeti(w, c), C_AKSAN_TAVAN), 'aksan')
+        if gecerli:
+            # Yalnızca özel isim/kısaltma olarak "geçerli" (boyle, hayatin, yaaa): Zemberek'in özel isim sözlüğü
+            # çok geniş olduğu için küçük harfle yazılmış böyle bir kelime çoğu zaman Türkçe karakteri eksik ya da
+            # uzatılmış sıradan bir kelimedir. Yukarıdaki güvenli adaylar denenir; harf tahminine girilmez.
+            return C
         # Düzenleme mesafesi adayları. Kısa ya da yabancı görünen kelimelerde komşu kelime sayısı çok
         # fazla ve hepsi "olası" görünür; oralarda tahmin yürütmek yerine kelimeyi koruyoruz.
         if not kisa:
@@ -704,6 +742,10 @@ class YazimDuzeltici:
                 aday = (dogru + j[len(yanlis):]).split()
                 if len(aday) == 1 and self.duzgun(aday[0]) and kabul(aday[0]):
                     C[(aday[0],)] = (taban + C_SOZLUK, 'birleştirme')
+        # Birleştirip üstüne bir de düzeltme (bogul du -> boğuldu) iki ayrı tahmin demek: yalnızca parçaların
+        # ikisi de hiçbir biçimde kelime değilken ya da ikisi de kelimeyken (o zaman dil modeli eşiği korur) denenir.
+        if not (ikisi_de_kelime or not (self.gecerli(a) or self.gecerli(b))):
+            return C
         konusma, aksan = self.konusma_dili(j)
         for c in konusma:
             if self.tanidik(c) and kabul(c):
@@ -1082,8 +1124,8 @@ class Duzeltici:
                             for i in parca[:-1]]
             cikti = self.yazim.duzelt(girdi, birlesebilir)
             for k, (i, g, (c, kaynak)) in enumerate(zip(parca, girdi, cikti)):
-                # kullanıcının büyük yazdığı ve çözümlenemeyen kelimelere (yabancı ad vb.) dokunma
-                if kullanici_buyuk[i] and not self.yazim.gecerli(kucuk[i]) and kaynak != 'aynı':
+                # kullanıcının büyük yazdığı ve sıradan kelime olarak çözümlenemeyen kelimelere (ad, yabancı ad) dokunma
+                if kullanici_buyuk[i] and not self.yazim.duzgun(kucuk[i]) and kaynak != 'aynı':
                     c, kaynak = (g,), 'aynı'
                 if g != kucuk[i] and kaynak == 'aynı':
                     kaynak = 'sayı eki kuralı'

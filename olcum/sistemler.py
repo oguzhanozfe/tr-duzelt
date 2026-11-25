@@ -29,6 +29,30 @@ class TrDuzelt:
         spec.loader.exec_module(self.modul)
         self.lm = self.modul.DilModeli()
         self.yazim = self.modul.YazimDuzeltici(self.lm)
+        self._onbellek_yukle()
+
+    def _onbellek_yukle(self):
+        """Zemberek'in öneri/çözümleme sonuçlarını diske yaz: yalnızca kelimeye bağlılar, tekrar ölçümleri çok hızlandırır."""
+        import atexit
+        import pickle
+        yol = os.path.join(KOK, 'olcum', 'veri', 'zemberek-onbellek.pkl')
+        alanlar = ('_gecerli', '_duzgun', '_oneri')
+        if os.path.exists(yol):
+            try:
+                with open(yol, 'rb') as f:
+                    for alan, deger in zip(alanlar, pickle.load(f)):
+                        getattr(self.yazim, alan).update(deger)
+            except Exception:
+                pass
+        ilk = sum(len(getattr(self.yazim, a)) for a in alanlar)
+
+        def yaz():
+            if sum(len(getattr(self.yazim, a)) for a in alanlar) > ilk:
+                os.makedirs(os.path.dirname(yol), exist_ok=True)
+                with open(yol + '.tmp', 'wb') as f:
+                    pickle.dump(tuple(getattr(self.yazim, a) for a in alanlar), f)
+                os.replace(yol + '.tmp', yol)
+        atexit.register(yaz)
 
     def gecerli(self, w):
         return self.yazim.gecerli(w)
