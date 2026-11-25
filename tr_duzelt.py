@@ -872,6 +872,11 @@ def paragraf_sinirlari(cumle_lemmalari, cumle_uzunluklari, pencere=2, hedef_keli
 # Hepsi bir arada
 # ==========================================================================
 
+_YALNIZ_BOSLUK = re.compile(r'[ \t]+')
+_NOKTA_ONCESI_BOSLUK = re.compile(r'[ \t]+(?=[.,!?;:…])')
+_COK_BOSLUK = re.compile(r'[ \t]{2,}')
+
+
 class Duzeltici:
     def __init__(self, model_yolu):
         self.lm = DilModeli()
@@ -1048,6 +1053,7 @@ class Duzeltici:
                 out.append(' ')
             else:
                 ayrac = ayraclar[i + 1] if i + 1 < n else kuyruk
+                ayrac = _COK_BOSLUK.sub(' ', _NOKTA_ONCESI_BOSLUK.sub('', ayrac))   # "bilmiyom . bunu  da"
                 if j in yeni_paragraf and j != N - 1:
                     ayrac = re.sub(r'\s+$', '', ayrac) + '\n\n'
                 out.append(ayrac)
