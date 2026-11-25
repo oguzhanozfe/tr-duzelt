@@ -151,7 +151,7 @@ Bu oturumun commit'leri sırayla: `948a8f7` T5, `95eecd0` noktalama ölçümü, 
    ```
    `gh` yoksa ad değişikliği GitHub'da Settings → Branches'tan yapılır. README'deki indirme bağlantısı dal adından bağımsız; başka değişiklik gerekmez.
 2. ~~T5 ölçümü~~, 3. ~~T5 aday kaynağı~~ — yapıldı, değmedi (yukarıda).
-4. ~~Noktalama için BERT~~ — yapıldı (`--bert`, `noktalama_bert/`). **Açık soru:** 211 MB'lık model depoda değil; GitHub sürümü (release) olarak mı yayımlansın, Hugging Face'e mi konsun, yoksa herkes kendisi mi eğitsin? Sahibine sor.
+4. ~~Noktalama için BERT~~ — yapıldı (`--bert`, `noktalama_bert/`). Model GitHub sürümünde: `noktalama-bert-v1` (`noktalama_bert.zip`, SHA-256 `a8e21211...9a87a2`). Modeli yeniden eğitirsen yeni sürüm (v2) aç, README'deki bağlantıyı güncelle.
 5. ~~BERT maskeli dil modeli puanı öznitelik~~ — yapıldı (`siralayici_bert.json`, kapılı).
 6. **Kural büyütme döngüsü.** `--eval` çıktısındaki "olası kural" önerileri → elle doğrula → tabloya ekle → `olcum/olc.py`. İstenirse tablolar ayrı bir dosyaya taşınıp, önerilen kuralı otomatik sınayan bir betik yazılabilir (yanlış biçim Zemberek'te geçersiz mi, doğrusu geçerli mi, temiz metinde bozma artıyor mu).
 7. **Gelecek zamanın konuşma biçimleri.** `başlicak` (başlayacak), `yagicak` (yağacak), `alcam` (alacağım) çoğu zaman düzelmiyor: ünlü düşmüş/daralmış gelecek zaman için aday üretilmiyor. `konusma_dili`'ne "c/ç'den önceki ı/i'yi a/e(y)a ile değiştir, ünlü yoksa ekle" biçimleri eklenebilir; aday tarafı olduğu için sonra iki sıralayıcıyı da yeniden eğit ve ölç.

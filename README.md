@@ -280,7 +280,14 @@ pip install torch transformers          # yalnızca CPU: pip install torch --ind
 python tr_duzelt.py --bert "olum sen ordayim diyosun ama gelmedin"
 ```
 
-İlk çalıştırmada BERTurk (~440 MB) Hugging Face'ten iner. Noktalama modeli (`noktalama_bert/`, 211 MB) depoda değil; ekran kartıyla birkaç dakikada kendiniz eğitebilirsiniz (aşağıda). Klasör yoksa `--bert` noktalamayı CRF'le yapar, kelime seçimi yine BERT'li çalışır.
+İlk çalıştırmada BERTurk (~440 MB) Hugging Face'ten iner. Noktalama modeli (`noktalama_bert/`, 211 MB) depoda değil, [sürümler sayfasında](https://github.com/oguzhanozfe/tr-duzelt/releases/tag/noktalama-bert-v1). `noktalama_bert.zip` dosyasını indirip `tr_duzelt.py`'nin bulunduğu klasöre açın:
+
+```powershell
+Invoke-WebRequest https://github.com/oguzhanozfe/tr-duzelt/releases/download/noktalama-bert-v1/noktalama_bert.zip -OutFile noktalama_bert.zip
+Expand-Archive noktalama_bert.zip -DestinationPath .
+```
+
+Klasör yoksa `--bert` noktalamayı CRF'le yapar, kelime seçimi yine BERT'li çalışır. Modeli kendiniz de eğitebilirsiniz (ekran kartıyla birkaç dakika; aşağıda).
 
 ## Yapamadıkları
 
