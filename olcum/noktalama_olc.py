@@ -19,6 +19,7 @@ KOK = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, KOK)
 sys.path.insert(0, os.path.join(KOK, 'olcum'))
 import veri                                                                  # noqa: E402
+import tr_duzelt as T                                                        # noqa: E402
 from egit_noktalama import read_ud, sentence_items, docs_to_sequences       # noqa: E402
 
 ISARETLER = (('P', 'nokta'), ('C', 'virgül'), ('Q', 'soru'))
@@ -36,49 +37,25 @@ class Crf:
     ad = 'crf (noktalama.crfsuite)'
 
     def __init__(self):
-        import tr_duzelt as T
         self.n = T.Noktalayici(os.path.join(KOK, 'noktalama.crfsuite'), T.DilModeli(), None)
 
     def __call__(self, kelimeler):
         return [e[1] for e in self.n.etiketle(kelimeler)[0]]
 
 
-class BertEtiketleyici:
-    """BERT tabanlı belirteç sınıflandırıcı. Her kelimenin İLK alt parçasının etiketi o kelimenin etiketidir."""
-    HARITA = {'O': 'O', 'PERIOD': 'P', 'COMMA': 'C', 'QUESTION_MARK': 'Q', 'P': 'P', 'C': 'C', 'Q': 'Q'}
-
-    def __init__(self, model):
-        import torch
-        from transformers import AutoModelForTokenClassification, AutoTokenizer
+class BertEtiketleyici(T.BertNoktalayici):
+    def __init__(self, model, virgul_esik=0.0, soru_esik=0.0):
+        super().__init__(model, virgul_esik, soru_esik)
         self.ad = 'bert:' + model
-        self.torch = torch
-        self.cihaz = 'cuda' if torch.cuda.is_available() else 'cpu'
-        self.tok = AutoTokenizer.from_pretrained(model)
-        self.model = AutoModelForTokenClassification.from_pretrained(model).float().to(self.cihaz).eval()
-        self.etiket = [self.HARITA[self.model.config.id2label[i]] for i in range(self.model.config.num_labels)]
-
-    def __call__(self, kelimeler, parca=150):
-        out = []
-        for b in range(0, len(kelimeler), parca):          # 512 alt parça sınırı: uzun metni kelime parçalarına böl
-            ws = kelimeler[b:b + parca]
-            g = self.tok(ws, is_split_into_words=True, return_tensors='pt', truncation=True, max_length=512)
-            with self.torch.no_grad():
-                tahmin = self.model(**g.to(self.cihaz)).logits[0].argmax(-1).tolist()
-            ilk = {}
-            for k, wi in enumerate(g.word_ids()):
-                if wi is not None and wi not in ilk:
-                    ilk[wi] = self.etiket[tahmin[k]]
-            out += [ilk.get(i, 'O') for i in range(len(ws))]
-        return out
 
 
-def kur(ad):
+def kur(ad, virgul_esik=0.0, soru_esik=0.0):
     if ad == 'crf':
         return Crf()
     if ad == 'bert-hazir':
-        return BertEtiketleyici('uygarkurt/bert-restore-punctuation-turkish')
+        return BertEtiketleyici('uygarkurt/bert-restore-punctuation-turkish', virgul_esik, soru_esik)
     if ad.startswith('bert:'):
-        return BertEtiketleyici(ad[5:])
+        return BertEtiketleyici(ad[5:], virgul_esik, soru_esik)
     raise SystemExit('bilinmeyen sistem: %s' % ad)
 
 
@@ -104,8 +81,10 @@ def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument('--sistem', default='crf', help='crf | bert-hazir | bert:<model klasörü ya da adı>')
     ap.add_argument('--set', nargs='*', default=['imst-dev', 'imst-test'])
+    ap.add_argument('--virgul-esik', type=float, default=0.0, help='BERT: virgül için en düşük olasılık')
+    ap.add_argument('--soru-esik', type=float, default=0.0, help='BERT: soru işareti için en düşük olasılık')
     a = ap.parse_args()
-    s = kur(a.sistem)
+    s = kur(a.sistem, a.virgul_esik, a.soru_esik)
     print('sistem: %s' % s.ad)
     for ad in a.set:
         d = diziler(ad)

@@ -567,6 +567,69 @@ OZNITELIK_ADLARI = (
     + ['cumle_uzunluk', 'cumle_gecersiz_orani', 'cumle_tr_harf_orani', 'cumle_aksan_duzeltme_orani',
        'sol_bilinmeyen', 'sag_bilinmeyen']
     + ['deasciifier_aday', 'deasciifier_ayni'])
+# İsteğe bağlı (--bert): BERTurk'ün maskeli dil modeli puanı. Bütün cümleye bakar; 2-gram modeli yalnızca yandaki kelimeye.
+BERT_OZNITELIKLER = ['bert_pll', 'bert_ort', 'bert_kazanc', 'bert_sonsal', 'bert_sira']
+# Taban sıralayıcının en iyi adaya verdiği olasılık bu aralıktaysa BERT'e de sorulur; dışındaysa karar taban sıralayıcınındır
+BELIRSIZ_ALT, BELIRSIZ_UST = 0.05, 0.98
+BERT_MODELI = 'dbmdz/bert-base-turkish-cased'   # uncased sürümü Türkçe karakterleri siliyor (çok -> cok): işe yaramaz
+
+
+class BertPuan:
+    """Bir adayın cümle içinde ne kadar "Türkçe durduğu": sözde log-olabilirlik (PLL). Adayın her alt parçası sırayla
+    maskelenir, BERT'in o parçaya verdiği log-olasılıklar toplanır. Ek kurulum: pip install torch transformers"""
+
+    PENCERE = 40           # alt parça: adayın iki yanından en çok bu kadarı (işlemcide süreyi bu belirler)
+
+    def __init__(self, ad=BERT_MODELI):
+        import torch
+        from transformers import AutoModelForMaskedLM, AutoTokenizer
+        from transformers.utils import logging as hf_log
+        hf_log.set_verbosity_error()
+        self.torch = torch
+        self.cihaz = 'cuda' if torch.cuda.is_available() else 'cpu'
+        self.tok = AutoTokenizer.from_pretrained(ad)
+        self.model = AutoModelForMaskedLM.from_pretrained(ad).to(self.cihaz).eval()
+        if self.cihaz == 'cpu':     # int8: işlemcide 1,7 kat hızlı; geliştirme tweetlerinde sonuç aynı (%74,8/%2,9/%0,28)
+            self.model = torch.quantization.quantize_dynamic(self.model, {torch.nn.Linear}, dtype=torch.qint8)
+        self._ids = {}
+
+    def ids(self, kelimeler):
+        out = []
+        for w in kelimeler:
+            if w not in self._ids:
+                self._ids[w] = self.tok(w, add_special_tokens=False)['input_ids'] or [self.tok.unk_token_id]
+            out += self._ids[w]
+        return out
+
+    def puanla(self, isler):
+        """isler: [(sol kelimeler, aday kelimeler, sağ kelimeler)] -> [[PLL, alt parça sayısı]]"""
+        torch = self.torch
+        satirlar, hedef = [], []                 # her maskeli dizi ve (iş no, maske yeri, doğru parça)
+        for no, (sol, c, sag) in enumerate(isler):
+            s, a, r = self.ids(sol), self.ids(c), self.ids(sag)
+            yer = max(0, (self.PENCERE * 2 - len(a)) // 2)
+            s, r = (s[-yer:] if yer else []), r[:yer]
+            dizi = [self.tok.cls_token_id] + s + a + r + [self.tok.sep_token_id]
+            for k, parca in enumerate(a):
+                m = list(dizi)
+                m[1 + len(s) + k] = self.tok.mask_token_id
+                satirlar.append(m)
+                hedef.append((no, 1 + len(s) + k, parca))
+        pll = [[0.0, 0] for _ in isler]
+        for b in range(0, len(satirlar), 256):
+            parti, hb = satirlar[b:b + 256], hedef[b:b + 256]
+            uz = max(map(len, parti))
+            x = torch.tensor([m + [self.tok.pad_token_id] * (uz - len(m)) for m in parti], device=self.cihaz)
+            maske = torch.tensor([[1] * len(m) + [0] * (uz - len(m)) for m in parti], device=self.cihaz)
+            sira = torch.arange(len(parti), device=self.cihaz)
+            with torch.no_grad():
+                lg = self.model(input_ids=x, attention_mask=maske).logits
+                lg = lg[sira, torch.tensor([h[1] for h in hb], device=self.cihaz)].float().log_softmax(-1)
+                lp = lg[sira, torch.tensor([h[2] for h in hb], device=self.cihaz)]
+            for (no, _, _), v in zip(hb, lp.tolist()):
+                pll[no][0] += v
+                pll[no][1] += 1
+        return pll
 
 
 def _lev(a, b):
@@ -587,8 +650,9 @@ class Siralayici:
     def __init__(self, yol):
         with open(yol, encoding='utf-8') as f:
             m = json.load(f)
-        if m['oznitelikler'] != OZNITELIK_ADLARI:
+        if m['oznitelikler'] not in (OZNITELIK_ADLARI, OZNITELIK_ADLARI + BERT_OZNITELIKLER):
             raise ValueError('%s bu kod sürümüyle uyumlu değil: egit_siralayici.py ile yeniden eğitin' % yol)
+        self.bert = len(m['oznitelikler']) > len(OZNITELIK_ADLARI)    # BERT öznitelikleriyle mi eğitildi?
         self.agaclar = [(a['f'], a['t'], a['l'], a['r'], a['v']) for a in m['agaclar']]
         self.esik = float(os.environ.get('TR_DUZELT_ESIK', m.get('esik', 0.5)))
 
@@ -606,8 +670,9 @@ class Siralayici:
 
 
 class YazimDuzeltici:
-    def __init__(self, lm, siralayici=None):
-        """siralayici: öğrenilmiş aday sıralayıcının (siralayici.json) yolu; yoksa elle ayarlı güven kuralları çalışır."""
+    def __init__(self, lm, siralayici=None, bert=None, taban=None):
+        """siralayici: öğrenilmiş aday sıralayıcının (siralayici.json) yolu; yoksa elle ayarlı güven kuralları çalışır.
+        bert: BertPuan; verilirse adaylara BERT öznitelikleri de eklenir (sıralayıcı da onlarla eğitilmiş olmalı)."""
         from pkg_resources import resource_filename
         from zemberek import TurkishMorphology, TurkishSpellChecker
         from zemberek.core.turkish import SecondaryPos
@@ -632,8 +697,14 @@ class YazimDuzeltici:
         self._aksanli, self._aday = {}, {}
         self.tablo = {}
         self.siralayici = None
+        self.bert = bert
+        self.taban = None       # BERT kipinde: BERT'e ne zaman sorulacağına karar veren BERT'siz sıralayıcı
         if siralayici and os.path.exists(siralayici):
             self.siralayici = Siralayici(siralayici)
+            if self.siralayici.bert != (bert is not None):
+                raise ValueError('%s %s eğitilmiş' % (siralayici, 'BERT ile' if self.siralayici.bert else 'BERT olmadan'))
+            if bert is not None and taban and os.path.exists(taban):
+                self.taban = Siralayici(taban)
             self._tablo_yukle(resource_filename)
 
     def _tablo_yukle(self, resource_filename):
@@ -1026,7 +1097,7 @@ class YazimDuzeltici:
             return None
         return out if len(out) == len(kelimeler) else None
 
-    def aday_satirlari(self, kelimeler, sonuc):
+    def aday_satirlari(self, kelimeler, sonuc, bert=True):
         """Sıralayıcının göreceği tablo: [(konum, [(aday, öznitelik vektörü)])]. Eğitim (egit_siralayici.py) ve
         çalışma anı AYNI fonksiyonu kullanır. sonuc: elle ayarlı ilk geçişin çıktısı (komşu kelimeler oradan alınır)."""
         lm = self.lm
@@ -1088,17 +1159,53 @@ class YazimDuzeltici:
                 v += [float(da is not None and len(c) == 1 and c[0] == da[i]), float(da is not None and da[i] == w)]
                 satirlar.append((c, v))
             out.append((i, satirlar))
+        if bert and self.bert is not None and out:
+            self._bert_oznitelikleri(kelimeler, sonuc, out)
         return out
+
+    def _bert_oznitelikleri(self, kelimeler, sonuc, out):
+        """Her adayı ilk geçişin düzelttiği cümlenin içine koyup BERT'e puanlat; öznitelikleri satırların sonuna ekle."""
+        duz, bas = [], []
+        for c, _ in sonuc:
+            bas.append(len(duz))
+            duz += list(c)
+        isler = []
+        for i, satirlar in out:
+            sol, sag = duz[:bas[i]], duz[bas[i] + len(sonuc[i][0]):]
+            isler += [(sol, [t.replace("'", '') for t in c], sag) for c, _ in satirlar]
+        puan = iter(self.bert.puanla(isler))
+        for i, satirlar in out:
+            p = [next(puan) for _ in satirlar]
+            ayni = next((pl for (c, _), (pl, _) in zip(satirlar, p) if c == (kelimeler[i],)), min(x[0] for x in p))
+            tepe = max(x[0] for x in p)
+            toplam = sum(math.exp(x[0] - tepe) for x in p)
+            sira = sorted(range(len(p)), key=lambda k: -p[k][0])
+            for k, ((c, v), (pl, n)) in enumerate(zip(satirlar, p)):
+                v += [pl, pl / max(1, n), pl - ayni, math.exp(pl - tepe) / toplam, float(sira.index(k))]
 
     def _siralayici_karari(self, kelimeler, sonuc):
         """Elle ayarlı ilk geçişin kararlarını öğrenilmiş sıralayıcının kararlarıyla değiştir. Her aday için
         "doğru kelime bu mu?" olasılığı hesaplanır; kelimenin kendisinden farklı en iyi aday, olasılığı hem eşiği
         hem de "olduğu gibi bırak" seçeneğini geçiyorsa uygulanır. Eşik yükseldikçe daha az ama daha emin düzeltir."""
         esik = self.siralayici.esik
-        for i, satirlar in self.aday_satirlari(kelimeler, sonuc):
-            if sonuc[i][1] == 'sözlük':
-                continue        # elle yazılmış kural tablosundan gelen düzeltme kesindir: eklenen kural her zaman işler
-            p = self.siralayici.olasilik([v for _, v in satirlar])
+        tum = [(i, s_) for i, s_ in self.aday_satirlari(kelimeler, sonuc, bert=self.taban is None)
+               if sonuc[i][1] != 'sözlük']   # elle yazılmış kural tablosundan gelen düzeltme kesindir
+        olas = {}
+        if self.taban is not None:
+            # BERT yalnızca taban sıralayıcının emin olmadığı kelimelere sorulur: işlemcide asıl maliyet o
+            belirsiz = []
+            for i, satirlar in tum:
+                p = self.taban.olasilik([v for _, v in satirlar])
+                ayni = (kelimeler[i],)
+                p_en = max((pi for (c, _), pi in zip(satirlar, p) if c != ayni), default=0.0)
+                if BELIRSIZ_ALT <= p_en <= BELIRSIZ_UST:
+                    belirsiz.append((i, satirlar))
+                else:
+                    olas[i] = p
+            if belirsiz:
+                self._bert_oznitelikleri(kelimeler, sonuc, belirsiz)
+        for i, satirlar in tum:
+            p = olas.get(i) or self.siralayici.olasilik([v for _, v in satirlar])
             ayni = (kelimeler[i],)
             p_ayni = max((pi for (c, _), pi in zip(satirlar, p) if c == ayni), default=0.0)
             en_iyi, p_en = max(((c, pi) for (c, _), pi in zip(satirlar, p) if c != ayni), key=lambda x: x[1])
@@ -1218,6 +1325,57 @@ def _windows_dll_dizinleri():
             pass
 
 
+# Eşikler UD Turkish-IMST geliştirme bölümünde seçildi (olcum/noktalama_olc.py): virgül isabeti 0,65 -> 0,80
+BERT_VIRGUL_ESIK, BERT_SORU_ESIK = 0.7, 0.6
+
+
+class BertNoktalayici:
+    """İsteğe bağlı (--bert) noktalama: egit_noktalama_bert.py ile eğitilen BERTurk etiketleyici. Her kelimenin
+    İLK alt parçasının etiketi o kelimenin etiketidir. Büyük harfi yine CRF verir; bu yalnızca noktalamayı değiştirir."""
+    HARITA = {'O': 'O', 'PERIOD': 'P', 'COMMA': 'C', 'QUESTION_MARK': 'Q', 'P': 'P', 'C': 'C', 'Q': 'Q'}
+
+    def __init__(self, model, virgul_esik=BERT_VIRGUL_ESIK, soru_esik=BERT_SORU_ESIK):
+        import torch
+        from transformers import AutoModelForTokenClassification, AutoTokenizer
+        from transformers.utils import logging as hf_log
+        hf_log.set_verbosity_error()
+        self.virgul_esik, self.soru_esik = virgul_esik, soru_esik
+        self.torch = torch
+        self.cihaz = 'cuda' if torch.cuda.is_available() else 'cpu'
+        self.tok = AutoTokenizer.from_pretrained(model)
+        self.model = AutoModelForTokenClassification.from_pretrained(model).float().to(self.cihaz).eval()
+        # int8 burada denenip bırakıldı: işlemcide 2 kat hızlı ama IMST testinde virgül F1 0,433 -> 0,400
+        self.etiket = [self.HARITA[self.model.config.id2label[i]] for i in range(self.model.config.num_labels)]
+
+    def __call__(self, kelimeler):
+        return [self.karar(p) for p in self.olasiliklar(kelimeler)]
+
+    def karar(self, p):
+        """p: {etiket: olasılık}. Emin değilse dokunma: virgül ve soru işareti ancak eşiği geçerse konur; eşiği
+        geçemeyen soru işareti cümle sonuysa noktaya döner."""
+        e = max(p, key=p.get)
+        if e == 'C' and p['C'] < self.virgul_esik:
+            e = 'O'
+        if e == 'Q' and p['Q'] < self.soru_esik:
+            e = 'P' if p['P'] + p['Q'] > p['O'] else 'O'
+        return e
+
+    def olasiliklar(self, kelimeler, parca=150):
+        out = []
+        for b in range(0, len(kelimeler), parca):          # 512 alt parça sınırı: uzun metni kelime parçalarına böl
+            ws = kelimeler[b:b + parca]
+            g = self.tok(ws, is_split_into_words=True, return_tensors='pt', truncation=True, max_length=512)
+            with self.torch.no_grad():
+                olas = self.model(**g.to(self.cihaz)).logits[0].float().softmax(-1).tolist()
+            ilk = {}
+            for k, wi in enumerate(g.word_ids()):
+                if wi is not None and wi not in ilk:
+                    ilk[wi] = dict(zip(self.etiket, olas[k]))
+            out += [ilk.get(i, {'O': 1.0, 'C': 0.0, 'P': 0.0, 'Q': 0.0}) for i in range(len(ws))]
+        return out
+
+
+
 class Noktalayici:
     def __init__(self, model_yolu, lm, morph):
         _windows_dll_dizinleri()
@@ -1230,6 +1388,7 @@ class Noktalayici:
         with open(model_yolu, 'rb') as f:
             self._model_baytlari = f.read()
         self.tagger.open_inmemory(self._model_baytlari)
+        self.bert = None           # BertNoktalayici; Duzeltici(bert=True) kurar
         self.lm = lm
         self.morph = morph
         self.SecondaryPos = SecondaryPos
@@ -1243,6 +1402,8 @@ class Noktalayici:
             e, b = crf_coz(self.tagger, crf_features(temiz[i:i + parca], self.lm), NOKTA_ESIK, VIRGUL_ESIK)
             etiketler += e
             buyuk += b
+        if self.bert is not None:          # noktalamayı BERT'ten al, harf durumunu CRF'ten
+            etiketler = [e[0] + n for e, n in zip(etiketler, self.bert(temiz))]
         return etiketler, buyuk
 
     def cozumle(self, cumle):
@@ -1370,10 +1531,19 @@ _COK_BOSLUK = re.compile(r'[ \t]{2,}')
 
 
 class Duzeltici:
-    def __init__(self, model_yolu):
+    def __init__(self, model_yolu, bert=False):
+        """bert=True: adayları BERTurk'e de puanlatan sıralayıcı (siralayici_bert.json; torch + transformers ister)."""
         self.lm = DilModeli()
-        self.yazim = YazimDuzeltici(self.lm, os.path.join(os.path.dirname(os.path.abspath(model_yolu)), 'siralayici.json'))
+        klasor = os.path.dirname(os.path.abspath(model_yolu))
+        self.yazim = YazimDuzeltici(self.lm, os.path.join(klasor, 'siralayici_bert.json' if bert else 'siralayici.json'),
+                                    BertPuan() if bert else None, os.path.join(klasor, 'siralayici.json'))
         self.nokta = Noktalayici(model_yolu, self.lm, self.yazim.morph)
+        if bert:
+            yol = os.path.join(klasor, 'noktalama_bert')
+            if os.path.isdir(yol):
+                self.nokta.bert = BertNoktalayici(yol)
+            else:
+                print('uyarı: %s yok, noktalama CRF ile yapılacak (README: "BERT kipi")' % yol, file=sys.stderr)
 
     def duzelt(self, metin, paragraf=False, ayrinti=False, izle=None):
         """izle: liste verilirse her aşamanın ara sonucu ona eklenir (--yolculuk bunu yazdırır)."""
@@ -1645,6 +1815,8 @@ def main():
                     help='düzeltmeyi Gemini ile uzaktan değerlendir (metni Google’a gönderir)')
     ap.add_argument('--eval-model', default=DEFAULT_MODEL,
                     help='--eval için Gemini model adı (varsayılan: %(default)s)')
+    ap.add_argument('--bert', action='store_true',
+                    help="kelime seçiminde BERTurk'ün cümle bağlamına da bak (daha az yanlış düzeltme; torch ister)")
     ap.add_argument('--paragraf', action='store_true',
                     help='deneysel paragraf bölmeyi aç (ölçümde rastgeleden iyi çıkmadı)')
     args = ap.parse_args()
@@ -1656,7 +1828,7 @@ def main():
     api_key = os.environ.get('GEMINI_API_KEY')
     if args.eval and not api_key:
         ap.error('--eval için GEMINI_API_KEY ortam değişkenini ayarlayın.')
-    d = Duzeltici(args.model)
+    d = Duzeltici(args.model, bert=args.bert)
     izle = [] if args.yolculuk else None
     sonuc, degisiklikler = d.duzelt(metin, paragraf=args.paragraf, ayrinti=True, izle=izle)
     if args.yolculuk:

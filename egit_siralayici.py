@@ -202,25 +202,31 @@ def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument('--cumle', type=int, default=6000, help='kullanılacak temiz cümle sayısı')
     ap.add_argument('--tur', type=int, default=2, help='her cümle kaç farklı biçimde bozulsun')
-    ap.add_argument('--cikti', default=os.path.join(KOK, 'siralayici.json'))
+    ap.add_argument('--cikti')
     ap.add_argument('--tablo', nargs='*', default=[],
                     help='öznitelik tablosu dosyaları: varsa oradan okunur (birden çoksa birleştirilir), yoksa ilkine yazılır')
     ap.add_argument('--atla', type=int, default=0, help='baştan bu kadar cümleyi atla (işi birkaç sürece bölmek için)')
     ap.add_argument('--tohum', type=int, default=2026)
+    ap.add_argument('--bert', action='store_true',
+                    help='BERTurk özniteliklerini de ekle (torch + transformers); varsayılan çıktı siralayici_bert.json')
     ap.add_argument('--yalniz-tablo', action='store_true', help='tabloyu üretip çık (eğitme)')
     a = ap.parse_args()
+    a.cikti = a.cikti or os.path.join(KOK, 'siralayici_bert.json' if a.bert else 'siralayici.json')
+    adlar = T.OZNITELIK_ADLARI + (T.BERT_OZNITELIKLER if a.bert else [])
 
     if a.tablo and all(os.path.exists(t) for t in a.tablo):
         X, y, grup = [], [], []
         for k, t in enumerate(a.tablo):
             with open(t) as fh:
                 Xk, yk, gk = json.load(fh)
-            X += Xk
+            X += [x[:len(adlar)] for x in Xk]      # BERT'li tablodan BERT'siz model de eğitilebilir (aynı veri)
             y += yk
             grup += [g * len(a.tablo) + k for g in gk]
     else:
         import sistemler
         yazim = sistemler.TrDuzelt(siralayici='').yazim   # sıralayıcısız: ilk geçiş + aday üretimi (Zemberek önbelleğiyle)
+        if a.bert:
+            yazim.bert = T.BertPuan()
         yazim._tablo_yukle(__import__('pkg_resources').resource_filename)
         cumleler = temiz_cumleler('boun-train.conllu', en_az=4, en_cok=40)
         random.Random(7).shuffle(cumleler)
@@ -252,10 +258,10 @@ def main():
             esik, 100.0 * yd[sec].mean() if sec.any() else 0.0, 100.0 * sec[yd == 1].mean()))
     dok = model.booster_.dump_model(num_iteration=model.best_iteration_)
     agaclar = [agac_duzlestir(a_['tree_structure']) for a_ in dok['tree_info']]
-    onem = sorted(zip(model.booster_.feature_importance('gain'), T.OZNITELIK_ADLARI), reverse=True)
+    onem = sorted(zip(model.booster_.feature_importance('gain'), adlar), reverse=True)
     print('en etkili öznitelikler:', ', '.join(ad for _, ad in onem[:12]))
     with open(a.cikti, 'w', encoding='utf-8') as fh:
-        json.dump({'oznitelikler': T.OZNITELIK_ADLARI, 'esik': 0.5, 'agaclar': agaclar}, fh)
+        json.dump({'oznitelikler': adlar, 'esik': 0.5, 'agaclar': agaclar}, fh)
     # dökülen modelin saf Python ile aynı sonucu verdiğini doğrula
     s = T.Siralayici(a.cikti)
     ornek = X[dogrulama][:200].tolist()

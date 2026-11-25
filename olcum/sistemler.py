@@ -21,7 +21,7 @@ class TrDuzelt:
     """Bu depodaki yazım düzeltici (noktalama ve büyük harf aşaması hariç). kod: başka bir sürümün klasörü.
     siralayici: öğrenilmiş aday sıralayıcının yolu; None = depodaki siralayici.json (varsa), '' = kullanma."""
 
-    def __init__(self, kod=None, ad='tr-duzelt', siralayici=None):
+    def __init__(self, kod=None, ad='tr-duzelt', siralayici=None, bert=False):
         self.ad = ad
         yol = os.path.join(kod or KOK, 'tr_duzelt.py')
         spec = importlib.util.spec_from_file_location('tr_duzelt_' + str(abs(hash(yol))), yol)
@@ -30,9 +30,13 @@ class TrDuzelt:
         spec.loader.exec_module(self.modul)
         self.lm = self.modul.DilModeli()
         if siralayici is None:
-            siralayici = os.path.join(os.path.dirname(yol), 'siralayici.json')
+            siralayici = os.path.join(os.path.dirname(yol), 'siralayici_bert.json' if bert else 'siralayici.json')
         try:
-            self.yazim = self.modul.YazimDuzeltici(self.lm, siralayici or None)
+            if bert:
+                self.yazim = self.modul.YazimDuzeltici(self.lm, siralayici or None, self.modul.BertPuan(),
+                                                       os.path.join(os.path.dirname(yol), 'siralayici.json'))
+            else:
+                self.yazim = self.modul.YazimDuzeltici(self.lm, siralayici or None)
         except TypeError:                      # sıralayıcıdan önceki sürümler
             self.yazim = self.modul.YazimDuzeltici(self.lm)
         self._onbellek_yukle()
@@ -162,6 +166,8 @@ def kur(ad, kod=None):
         return HicbirSey()
     if ad == 'tr-duzelt':
         return TrDuzelt(kod, ad if not kod else 'tr-duzelt@' + os.path.basename(os.path.normpath(kod)))
+    if ad == 'tr-duzelt-bert':                 # adayları BERTurk'e de puanlatan sıralayıcı (torch + transformers)
+        return TrDuzelt(kod, ad, bert=True)
     if ad == 'tr-duzelt-sezgisel':             # öğrenilmiş sıralayıcı olmadan, yalnızca elle ayarlı kurallar
         return TrDuzelt(kod, ad, siralayici='')
     if ad == 'zemberek-normalizer':

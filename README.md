@@ -181,6 +181,7 @@ Her seçim ölçülerek yapıldı. Ölçüm verisi: gerçek insanların yazdığ
 | tr-duzelt, elle ayarlı kurallar (sıralayıcısız) | %67,3 | %5,9 | %0,45 |
 | tr-duzelt, öğrenilmiş sıralayıcı (25 Kasım) | %73,7 | %4,1 | %0,42 |
 | **tr-duzelt, şimdiki: + kural son geçişi, yeni adaylar, eşik 0,7** | **%72,7** | **%2,7** | **%0,27** |
+| **tr-duzelt `--bert`: belirsiz kelimede BERTurk'e de sorar** | **%75,7** | **%2,7** | **%0,35** |
 
 Tek tek gerekçeler:
 
@@ -201,7 +202,7 @@ pip install torch transformers sentencepiece
 python olcum/olc.py --sistem t5 --set gercek-test
 ```
 
-Noktalama içinse durum farklı: BERT tabanlı modeller ([BERTurk](https://github.com/stefan-it/turkish-bert) üzerine eğitilmiş olanlar) bu işin bilinen en iyi yöntemi; virgülde bizim modelden belirgin biçimde iyiler. Sıradaki büyük adım bu.
+Kelimenin ne demek istediğini anlamak için daha küçük ve daha uygun bir sinir ağı işe yaradı: [BERTurk](https://github.com/stefan-it/turkish-bert). İsteğe bağlı; aşağıda ["BERT kipi"](#bert-kipi-isteğe-bağlı).
 
 **Neden LLM değil?** Büyük bir sohbet modeli bu işi büyük olasılıkla daha iyi yapar. Ama her metin için para ya da güçlü bir makine ister, metni dışarı gönderir ve bazen kimsenin istemediği yerleri de "güzelleştirir". Bu projede LLM yalnızca yardımcıdır: sonucu denetler ve kural önerir ([aşağıda](#kural-eklemek-ve-llmin-rolü)).
 
@@ -248,12 +249,42 @@ Bu tablo eğitim betiğinin kendi ayırdığı belgelerden. Her yöntemi **aynı
 |---|---|---|---|
 | Bizim CRF (düzelticinin kullandığı ayarlarla) | 0,675 | 0,079 | 0,341 |
 | Hazır BERT modeli ([uygarkurt/bert-restore-punctuation-turkish](https://huggingface.co/uygarkurt/bert-restore-punctuation-turkish)) | 0,276 | 0,300 | 0,171 |
+| **Bizim BERTurk etiketleyicimiz (`--bert`)** | **0,782** | **0,433** | **0,463** |
 
-Hazır BERT modeli kendi model kartında nokta için 0,96 bildiriyor ama burada cümle sonlarının çoğuna nokta yerine virgül koyuyor (`güzeldi, dışarı çıktık, sonra eve döndük,`). Bu haliyle kullanılamaz. Bizim CRF'in virgülü düşük çünkü düzeltici onu bilerek çok temkinli çalıştırıyor: yalnızca çok emin olduğu yere virgül koyuyor.
+Hazır BERT modeli kendi model kartında nokta için 0,96 bildiriyor ama burada cümle sonlarının çoğuna nokta yerine virgül koyuyor (`güzeldi, dışarı çıktık, sonra eve döndük,`). Bu haliyle kullanılamaz. Bizim CRF'in virgülü düşük çünkü düzeltici onu bilerek çok temkinli çalıştırıyor: yalnızca çok emin olduğu yere virgül koyuyor. Kendi BERTurk etiketleyicimiz CRF'le aynı veriyle eğitildi ve üç işarette de ondan iyi; koyduğu virgüllerin %75'i doğru (CRF'te %69).
+
+## BERT kipi (isteğe bağlı)
+
+`--bert` iki şeyi değiştirir. İkisi de [BERTurk](https://huggingface.co/dbmdz/bert-base-turkish-cased) üzerine kurulu. BERTurk, milyarlarca kelimelik Türkçe metinle eğitilmiş, cümlenin tamamına bakan bir dil modeli (110 milyon parametre). Sohbet modeli değil: metin üretmez, yalnızca puan verir.
+
+1. **Kelime seçimi.** Varsayılan sıralayıcı yalnızca yandaki kelimelere bakabiliyor. `olum` mu `ölüm` mü `oğlum` mu, `bende` mi `ben de` mi? Bunu çoğu zaman cümlenin geri kalanı söyler. BERT kipinde, taban sıralayıcının **emin olamadığı** kelimelerde her aday cümlenin içine konup BERTurk'e sorulur: "Bu cümlede bu kelime ne kadar olası?" Bu puan sıralayıcıya beş yeni ipucu olarak girer. Sıralayıcı bu ipuçlarıyla yeniden eğitildi (`siralayici_bert.json`). Emin olunan kelimelere BERT hiç sorulmaz; işlemcide süreyi üç kat kısaltan şey bu.
+2. **Noktalama.** CRF'in yerine BERTurk üzerine eğittiğimiz noktalama etiketleyicisi (`noktalama_bert/`). Büyük harfi yine CRF verir. Virgülü ancak %70'ten, soru işaretini %60'tan eminse koyar.
+
+Sonuç (gerçek tweetler, test):
+
+| | Düzeltilen | Yanlış düzeltilen | Bozulan |
+|---|---|---|---|
+| Varsayılan | %72,7 | %2,7 | %0,27 |
+| `--bert` | %75,7 | %2,7 | %0,35 |
+| Eşik 0,9 | %66,0 | %1,9 | %0,12 |
+| `--bert`, eşik 0,9 | %68,9 | %1,8 | %0,13 |
+
+Yapay testlerde fark daha açık: cümlede tek yazım hatası %84'ten %89'a, üç yazım hatası %85'ten %90'a.
+
+**Ekran kartı gerekmez.** İşlemcide kelime seçimindeki BERTurk otomatik olarak 8 bitlik tam sayı hesabına geçer: 1,7 kat hızlı, sonuç aynı (geliştirme tweetlerinde %74,8 / %2,9 / %0,28). Tek çekirdekte kelime seçimi saniyede ~65 kelime (aynı ölçümde BERT'siz ~440), noktalama ~300 kelime. Ekran kartı varsa kendiliğinden kullanılır.
+
+Kurulum:
+
+```bash
+pip install torch transformers          # yalnızca CPU: pip install torch --index-url https://download.pytorch.org/whl/cpu
+python tr_duzelt.py --bert "olum sen ordayim diyosun ama gelmedin"
+```
+
+İlk çalıştırmada BERTurk (~440 MB) Hugging Face'ten iner. Noktalama modeli (`noktalama_bert/`, 211 MB) depoda değil; ekran kartıyla birkaç dakikada kendiniz eğitebilirsiniz (aşağıda). Klasör yoksa `--bert` noktalamayı CRF'le yapar, kelime seçimi yine BERT'li çalışır.
 
 ## Yapamadıkları
 
-- **Yazımı doğru, anlamı yanlış kelimeler.** `yaşam küçük` (doğrusu `yaşım küçük`), `oldum/öldüm` gibi durumlarda iki kelime de geçerli Türkçedir. Doğrusunu seçmek cümleyi anlamayı gerektirir; düzeltici yalnızca yandaki kelimelere bakabiliyor. Emin olmadığı için çoğunu bırakır.
+- **Yazımı doğru, anlamı yanlış kelimeler.** `yaşam küçük` (doğrusu `yaşım küçük`), `oldum/öldüm` gibi durumlarda iki kelime de geçerli Türkçedir. Doğrusunu seçmek cümleyi anlamayı gerektirir; varsayılan kip yalnızca yandaki kelimelere bakabiliyor. `--bert` bazılarını yakalar; emin olmadığı için çoğunu bırakır.
 - **de/da ve ki.** `bende → ben de` artık bazen düzeliyor, ama güvenilir değil: gerçek tweetlerde bitişik yazılmış kelime hatalarının yaklaşık yarısı düzeltiliyor.
 - **Birden çok harfi yanlış kelimeler.** `dokmusa` (dolmuşa) gibi iki harfi birden yanlış kelimeler için aday üretilemiyor; kelime korunur.
 - **Virgül.** Model yalnızca çok emin olduğunda virgül koyar; eksik virgül çok kalır.
@@ -382,6 +413,8 @@ print(d.duzelt("herkez geldimi bilmiyorum"))
 | `noktalama.crfsuite` | Öğrenilmiş noktalama + büyük harf modeli (5,6 MB) |
 | `egit_siralayici.py` | Sıralayıcıyı eğitir (cümleleri bozar, adayları çıkarır, modeli kurar) |
 | `egit_noktalama.py` | Noktalama modelini eğitir |
+| `siralayici_bert.json` | `--bert` kipinin sıralayıcısı: aynı 50 ipucu + BERTurk'ün 5 ipucu (1,3 MB) |
+| `egit_noktalama_bert.py` | `--bert` kipinin noktalama modelini (`noktalama_bert/`) eğitir |
 | `olcum/` | Ölçüm düzeneği: `veri.py` test setlerini kurar, `olcut.py` sayar, `sistemler.py` karşılaştırılan yöntemler, `olc.py` çalıştırır; `hata_turleri.py` hata türüne göre döküm verir, `esik_tara.py` sıralayıcının eşiğini tarar |
 | `tr_eval.py`, `tests/` | İsteğe bağlı Gemini denetimi ve testleri |
 | `CLAUDE.md` | Projeyi devralacak geliştirici (ya da Claude Code) için notlar: kurallar, tuzaklar, sıradaki işler |
@@ -403,6 +436,15 @@ python egit_noktalama.py --trmor2018 trmor2018.train --ud *.conllu \
     --cikti noktalama.crfsuite --test-kitap 14 17
 ```
 
+**BERT kipi:** sıralayıcı için `python egit_siralayici.py --bert` (tablo üretimi BERTurk'ü ekran kartında çalıştırır; tabloyu ayrı süreçlere bölmek için CLAUDE.md'deki komutlar). Noktalama için, yukarıdaki verilerle:
+
+```bash
+pip install torch transformers
+python egit_noktalama_bert.py --trmor2018 trmor2018.train --ud *.conllu --cikti noktalama_bert --test-kitap 14 17
+```
+
+RTX 3090'da 3 tur yaklaşık 3 dakika sürdü (verinin okunması hariç). Ayrılmış TrMor belgelerinde nokta 0,880, virgül 0,567, soru 0,771 F1 (CRF: 0,806 / 0,332 / 0,580).
+
 Kendi alanınızdan düzgün yazılmış metinle eğitmek hem başarımı artırır hem lisans sorusunu sadeleştirir. Ayrıntılar `egit_noktalama.py` başlığında. Windows'ta eğitirken `--cikti` yolunda Türkçe karakter olmasın: CRFsuite model dosyasını C kütüphanesiyle yazar ve bu tür yolları açamaz. (`tr_duzelt.py` modeli Python üzerinden okuduğu için bundan etkilenmez.)
 
 ## Veri, araçlar ve atıflar
@@ -410,7 +452,10 @@ Kendi alanınızdan düzgün yazılmış metinle eğitmek hem başarımı artır
 **Modellerin eğitildiği veriler:**
 
 - `noktalama.crfsuite` (≈858 bin kelime): [TrMor2018](https://github.com/ai-ku/TrMor2018) — Dayanık, Akyürek, Yüret (2018), MIT; Universal Dependencies Türkçe ağaç yapıları: [BOUN](https://github.com/UniversalDependencies/UD_Turkish-BOUN), [Kenet](https://github.com/UniversalDependencies/UD_Turkish-Kenet), [Penn](https://github.com/UniversalDependencies/UD_Turkish-Penn), [Tourism](https://github.com/UniversalDependencies/UD_Turkish-Tourism), [FrameNet](https://github.com/UniversalDependencies/UD_Turkish-FrameNet), [GB](https://github.com/UniversalDependencies/UD_Turkish-GB) (CC BY-SA 4.0), [PUD](https://github.com/UniversalDependencies/UD_Turkish-PUD) (CC BY-SA 3.0)
-- `siralayici.json`: UD Turkish-BOUN eğitim bölümünün yapay olarak bozulmuş cümleleri (CC BY-SA 4.0)
+- `siralayici.json`, `siralayici_bert.json`: UD Turkish-BOUN eğitim bölümünün yapay olarak bozulmuş cümleleri (CC BY-SA 4.0)
+- `noktalama_bert/`: `noktalama.crfsuite` ile aynı veriler; temel model [BERTurk](https://huggingface.co/dbmdz/bert-base-turkish-cased) (Stefan Schweter, MDZ Digital Library; MIT)
+
+**Model keşfi ve araştırma:** Esra Bingöl.
 
 Model dosyaları bu derlemlerden öğrenilmiş istatistikleri içerir; yeniden dağıtırken ya da ticari bir üründe kullanırken bu lisansların atıf ve aynı lisansla paylaşma koşullarını dikkate alın.
 

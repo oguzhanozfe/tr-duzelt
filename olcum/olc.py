@@ -27,7 +27,7 @@ import sistemler   # noqa: E402
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument('--sistem', default='tr-duzelt',
-                    help='hicbir-sey | tr-duzelt | tr-duzelt-sezgisel | zemberek-normalizer | zemberek-yazim | '
+                    help='hicbir-sey | tr-duzelt | tr-duzelt-bert | tr-duzelt-sezgisel | zemberek-normalizer | zemberek-yazim | '
                          'symspell | t5[:huggingface-model-adı]')
     ap.add_argument('--kod', help='tr-duzelt için başka bir sürümün klasörü (eski sürümle karşılaştırmak için)')
     ap.add_argument('--set', nargs='*', help='ölçülecek setler (varsayılan: hepsi)')

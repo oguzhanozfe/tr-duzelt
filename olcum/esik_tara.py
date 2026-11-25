@@ -3,6 +3,7 @@
 
   python olcum/esik_tara.py                 # 0.3 0.4 0.5 0.6 0.7 0.8
   python olcum/esik_tara.py 0.5 0.9
+  python olcum/esik_tara.py --bert          # BERT öznitelikli sıralayıcı (siralayici_bert.json)
 
 Sıralayıcıyı yeniden eğittikten sonra çalıştırın; seçilen eşik egit_siralayici.py'nin yazdığı siralayici.json
 içindeki "esik" alanına (ya da TR_DUZELT_ESIK ortam değişkenine) yazılır. Test bölümüne bakarak eşik seçmeyin.
@@ -17,8 +18,9 @@ import sistemler   # noqa: E402
 
 
 def main():
-    esikler = [float(x) for x in sys.argv[1:]] or [0.3, 0.4, 0.5, 0.6, 0.7, 0.8]
-    s = sistemler.TrDuzelt()
+    bert = '--bert' in sys.argv          # siralayici_bert.json'u tara
+    esikler = [float(x) for x in sys.argv[1:] if x != '--bert'] or [0.3, 0.4, 0.5, 0.6, 0.7, 0.8]
+    s = sistemler.TrDuzelt(bert=bert)
     if s.yazim.siralayici is None:
         raise SystemExit('siralayici.json bulunamadı: önce egit_siralayici.py çalıştırın')
     ciftler = [(g, d) for g, d, _ in veri.tweetler()[:1000]]
