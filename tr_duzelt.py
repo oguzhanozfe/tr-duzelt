@@ -423,7 +423,7 @@ GOVDE_DUZELT = {
     'farket': 'fark et', 'terket': 'terk et', 'yardımet': 'yardım et', 'teşekküret': 'teşekkür et',
     'birşey': 'bir şey', 'herşey': 'her şey', 'hiçbirşey': 'hiçbir şey', 'hergün': 'her gün',
     'herzaman': 'her zaman', 'pekçok': 'pek çok', 'hiçkimse': 'hiç kimse', 'birsürü': 'bir sürü',
-    'şuan': 'şu an',
+    'şuan': 'şu an', 'dahada': 'daha da',
 }
 # Tam eşleşme: kısaltmalar ve bitişik yazılan bağlaçlar
 TAM_DUZELT = {
@@ -431,7 +431,7 @@ TAM_DUZELT = {
     'bi': 'bir', 'bişey': 'bir şey', 'bişi': 'bir şey', 'saol': 'sağ ol', 'sağol': 'sağ ol',
     'nası': 'nasıl', 'naber': 'ne haber', 'nolur': 'ne olur', 'noldu': 'ne oldu',
     'napıyorsun': 'ne yapıyorsun', 'napıyosun': 'ne yapıyorsun', 'slm': 'selam', 'mrb': 'merhaba',
-    'tmm': 'tamam', 'tşk': 'teşekkürler', 'bn': 'ben', 'sn': 'sen', 'çk': 'çok', 'gzl': 'güzel',
+    'tmm': 'tamam', 'tşk': 'teşekkürler', 'bn': 'ben', 'sn': 'sen', 'çk': 'çok', 'gzl': 'güzel', 'gbi': 'gibi',
     'nbr': 'ne haber', 'cvp': 'cevap', 'öle': 'öyle', 'böle': 'böyle', 'şöle': 'şöyle', 'sora': 'sonra',
 }
 # Geçerli ama konuşma diline ait biçimler: dil modeli de isterse yazı diline çevrilir
@@ -558,6 +558,9 @@ class YazimDuzeltici:
         w2 = re.sub(r'([ıiuü])o', r'\1yo', w)          # istiodum -> istiyodum
         if w2 != w:
             bicimler.append(w2)
+        w3 = re.sub(r'([ıiuü])yc([ae])', r'\1c\2', w)   # yapiycaz -> yapicaz (-> yapacağız)
+        if w3 != w:
+            bicimler.append(w3)
         konusma, aksan = [], []
         for f in bicimler:
             if f != w and self.gecerli(f):
