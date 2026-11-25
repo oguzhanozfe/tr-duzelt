@@ -88,6 +88,9 @@ def is_word(tok):
 # (küçük harfli; '.', ',', '?' ve <s>, </s> belirteçlerini de içeriyor)
 # ==========================================================================
 
+_KESME_EKI = re.compile(r"^(?:n?[ıiuü]n|y?[ıiuü]|y?[ae]|[dt][ae]n?|[dt][ae]ki|y?l[ae]|l[ae]r[a-zçğıöşü]*|s[ıiuü][a-zçğıöşü]*)$")
+
+
 class DilModeli:
     def __init__(self):
         import numpy as np
@@ -97,6 +100,7 @@ class DilModeli:
         self.lm = SmoothLM.builder(yol).log_base(np.e).build()
         self.V = self.lm.vocabulary
         self._i, self._p = {}, {}
+        self._ozel = None
 
     def idx(self, w):
         i = self._i.get(w)
@@ -116,6 +120,27 @@ class DilModeli:
         """(a, b) ikilisi eğitim derleminde gerçekten görülmüş mü?"""
         ia, ib = self.idx(a), self.idx(b)
         return bool(ia > 0 and ib > 0 and self.lm.ngram_exists((ia, ib)))
+
+    def tekli(self, w):
+        """log P(w); dağarcıkta yoksa -inf."""
+        i = self.idx(w)
+        return float(self.lm.get_unigram_probability(i)) if i > 0 else float('-inf')
+
+    @property
+    def ozel_isimler(self):
+        """Derlemde özel isim gibi kullanılmış gövdeler: dağarcıkta en az iki farklı kesmeli çekimi
+        olanlar (trabzon'a, trabzon'da ...). Zemberek'in özel isim sözlüğü çok geniş (we, go, na, ra
+        bile var); büyük harf kararını bu kümeyle doğruluyoruz."""
+        if self._ozel is None:
+            from collections import Counter
+            say = Counter()
+            for w in self.V.vocabulary:
+                if "'" in w:
+                    govde, _, ek = w.partition("'")
+                    if len(govde) > 1 and govde.isalpha() and _KESME_EKI.match(ek):
+                        say[govde] += 1
+            self._ozel = frozenset(g for g, c in say.items() if c >= 2)
+        return self._ozel
 
 
 # ==========================================================================
@@ -259,10 +284,11 @@ def crf_features(words, lm=None):
 
 def crf_coz(tagger, oznitelikler, nokta_esik=0.5, virgul_esik=0.5):
     """Sonsal (posterior) çözümleme: her kelimede noktalama olasılıklarını topla, eşikle karar ver.
-    Eşiği yükseltmek = daha az ama daha isabetli işaret (özellikle virgülde işe yarar)."""
+    Eşiği yükseltmek = daha az ama daha isabetli işaret (özellikle virgülde işe yarar).
+    Döndürür: (etiketler, büyük harf olasılıkları)"""
     tagger.set(oznitelikler)
     etiketler = tagger.labels()
-    out = []
+    out, buyuk = [], []
     for i in range(len(oznitelikler)):
         pn = {'O': 0.0, 'C': 0.0, 'P': 0.0, 'Q': 0.0}
         ph = {'l': 0.0, 'c': 0.0, 'u': 0.0}
@@ -277,7 +303,8 @@ def crf_coz(tagger, oznitelikler, nokta_esik=0.5, virgul_esik=0.5):
         else:
             n = 'O'
         out.append(max(ph, key=ph.get) + n)
-    return out
+        buyuk.append(ph['c'] + ph['u'])
+    return out, buyuk
 
 
 # ==========================================================================
@@ -677,6 +704,8 @@ def gercek_kelime_kabul(kazanc, aday, kanit):
 # Yanlış virgül, eksik virgülden daha rahatsız edici olduğu için virgül eşiği yüksek tutuluyor.
 NOKTA_ESIK = 0.5
 VIRGUL_ESIK = 0.8
+BUYUK_ESIK = 0.5                # kelimenin özel isim dışında anlamı da varsa (deniz, gül) CRF'in vermesi gereken olasılık
+BUYUK_ESIK_YALNIZ_OZEL = 0.5    # yalnızca özel isimse (trabzon) gereken olasılık
 
 AYLAR = ('ocak', 'şubat', 'mart', 'nisan', 'mayıs', 'haziran', 'temmuz', 'ağustos', 'eylül',
          'ekim', 'kasım', 'aralık')
@@ -717,11 +746,12 @@ class Noktalayici:
     def etiketle(self, kelimeler, parca=300):
         """Her kelime için 'lO', 'cP' ... (harf durumu + ardından gelen noktalama)."""
         temiz = [w.replace("'", '') or w for w in kelimeler]
-        etiketler = []
+        etiketler, buyuk = [], []
         for i in range(0, len(temiz), parca):
-            etiketler += crf_coz(self.tagger, crf_features(temiz[i:i + parca], self.lm),
-                                 NOKTA_ESIK, VIRGUL_ESIK)
-        return etiketler
+            e, b = crf_coz(self.tagger, crf_features(temiz[i:i + parca], self.lm), NOKTA_ESIK, VIRGUL_ESIK)
+            etiketler += e
+            buyuk += b
+        return etiketler, buyuk
 
     def cozumle(self, cumle):
         """Bir cümlenin kelimeleri için Zemberek çözümlemesi + belirsizlik giderme.
@@ -923,17 +953,17 @@ class Duzeltici:
         N = len(duz)
 
         # --- 3) CRF: harf durumu + noktalama (kullanıcının satır sonları ayrı diziler olarak)
-        etiket, bas = [], 0
+        etiket, p_buyuk, bas = [], [], 0
         for j in range(N):
             son_belirtec = j + 1 == N or sahip[j + 1] != sahip[j]
             if j + 1 == N or (son_belirtec and sert[sahip[j]]):
-                e = self.nokta.etiketle(duz[bas:j + 1])
+                e, b = self.nokta.etiketle(duz[bas:j + 1])
                 if e[-1][1] in 'OC':
                     e[-1] = e[-1][0] + 'P'                   # dizinin sonu = cümle sonu
                 etiket += e
+                p_buyuk += b
                 bas = j + 1
         nokta = [e[1] for e in etiket]
-        harf = [e[0] for e in etiket]
         # kullanıcının zaten koyduğu noktalama korunur
         kullanici_nokta = [None] * N
         for j in range(N):
@@ -961,6 +991,11 @@ class Duzeltici:
             for j, x in zip(range(a, b), self.nokta.cozumle(duz[a:b])):
                 bilgi[j] = x
 
+        # Büyük harf kararı üç kanıtın kesişimi: (1) Zemberek sözlüğünde özel isim, (2) büyük derlemde
+        # gerçekten özel isim gibi kullanılmış (DilModeli.ozel_isimler), (3) kelimenin başka anlamı da
+        # varsa CRF bağlamdan özel isim diyor. CRF tek başına (tanımadığı kelimeye) büyük harf koymaz;
+        # kullanıcının kendi yazdığı büyük harf ise her zaman korunur.
+        taninan_ozel = self.lm.ozel_isimler
         bicim = []
         for j, t in enumerate(duz):
             lemma, tur, ozel, yalniz_ozel, kok, ek = bilgi[j]
@@ -968,12 +1003,11 @@ class Duzeltici:
             if t[0].isdigit():
                 s = t
             elif "'" in t:
-                s = tr_capitalize(t)
-            elif ozel and (yalniz_ozel or harf[j] in 'cu' or kb):
+                s = tr_capitalize(t) if (kb or t.split("'")[0] in taninan_ozel) else t
+            elif ozel and (kb or (tr_lower(kok) in taninan_ozel and
+                                  p_buyuk[j] >= (BUYUK_ESIK_YALNIZ_OZEL if yalniz_ozel else BUYUK_ESIK))):
                 s = kok + ek                      # ek, gerekiyorsa kesme işaretiyle birlikte gelir
-            elif harf[j] == 'u' and len(t) <= 5 and t.isalpha():
-                s = tr_upper(t)
-            elif (harf[j] == 'c' and t.isalpha()) or kb:
+            elif kb:
                 s = tr_capitalize(t)
             else:
                 s = t
