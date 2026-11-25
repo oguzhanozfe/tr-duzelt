@@ -179,7 +179,8 @@ Her seçim ölçülerek yapıldı. Ölçüm verisi: gerçek insanların yazdığ
 | Zemberek'in hazır normalleştiricisi | %75,0 | %11,6 | %2,44 |
 | tr-duzelt, ilk sürüm | %62,8 | %10,7 | %1,39 |
 | tr-duzelt, elle ayarlı kurallar (sıralayıcısız) | %67,3 | %5,9 | %0,45 |
-| **tr-duzelt, öğrenilmiş sıralayıcı (şimdiki)** | **%73,7** | **%4,1** | **%0,42** |
+| tr-duzelt, öğrenilmiş sıralayıcı (25 Kasım) | %73,7 | %4,1 | %0,42 |
+| **tr-duzelt, şimdiki: + kural son geçişi, yeni adaylar, eşik 0,7** | **%72,7** | **%2,7** | **%0,27** |
 
 Tek tek gerekçeler:
 
@@ -210,12 +211,12 @@ Yukarıdaki tablo gerçek veriydi. Bir de temiz cümleleri **bilerek bozup** ger
 
 | Test (düzeltilen / yanlış düzeltilen) | İlk sürüm | Zemberek normalleştirici | tr-duzelt (şimdiki) |
 |---|---|---|---|
-| Cümlede tek yazım hatası | %90 / %10 | %75 / %23 | **%86 / %4** |
-| Cümlede üç yazım hatası | %91 / %8 | %74 / %23 | **%87 / %4** |
-| Ortasından bölünmüş kelime (`orma na`) | %0 / hepsi | %70 / %28 | **%88 / %3** |
-| Yoğun gürültü: hepsi bir arada + araya İngilizce | %74 / %21 | %71 / %23 | **%87 / %3** |
-| Araya giren İngilizce: bozulan kelime | %1,50 | %3,08 | **%0,16** |
-| Temiz metin: bozulan kelime | %0,32 | %1,32 | **%0,18** |
+| Cümlede tek yazım hatası | %90 / %10 | %75 / %23 | **%84 / %2** |
+| Cümlede üç yazım hatası | %91 / %8 | %74 / %23 | **%85 / %3** |
+| Ortasından bölünmüş kelime (`orma na`) | %0 / hepsi | %70 / %28 | **%88 / %2** |
+| Yoğun gürültü: hepsi bir arada + araya İngilizce | %74 / %21 | %71 / %23 | **%85 / %2** |
+| Araya giren İngilizce: bozulan kelime | %1,50 | %3,08 | **%0,11** |
+| Temiz metin: bozulan kelime | %0,32 | %1,32 | **%0,12** |
 
 Okurken bilinmesi gerekenler:
 
@@ -339,10 +340,16 @@ python tr_duzelt.py --dosya girdi.txt --ayrinti            # yapılan kelime dü
 python tr_duzelt.py --dosya girdi.txt --cikti cikti.txt    # sonucu UTF-8 dosyaya yazar
 ```
 
-**Ne kadar cesur olsun?** `TR_DUZELT_ESIK` ortam değişkeni sıralayıcının eşiğini değiştirir (varsayılan 0,5). Yükseltirseniz daha az ama daha emin düzeltir. Gerçek tweetlerde 0,8 ile yanlış düzeltilenler %3,9'dan %3,1'e iner, düzeltilenler de %74'ten %69'a.
+**Ne kadar cesur olsun?** `TR_DUZELT_ESIK` ortam değişkeni sıralayıcının eşiğini değiştirir (varsayılan 0,7; geliştirme tweetlerinde seçildi). Yükseltirseniz daha az ama daha emin düzeltir. Gerçek tweetlerin test bölümünde:
+
+| Eşik | Düzeltilen | Yanlış düzeltilen | Bozulan |
+|---|---|---|---|
+| 0,5 | %74,4 | %3,6 | %0,43 |
+| 0,7 (varsayılan) | %72,7 | %2,7 | %0,27 |
+| 0,9 | %66,0 | %1,9 | %0,12 |
 
 ```powershell
-$env:TR_DUZELT_ESIK = "0.8"      # PowerShell;  Linux/macOS: TR_DUZELT_ESIK=0.8 python tr_duzelt.py ...
+$env:TR_DUZELT_ESIK = "0.9"      # PowerShell;  Linux/macOS: TR_DUZELT_ESIK=0.9 python tr_duzelt.py ...
 ```
 
 **İsteğe bağlı Gemini denetimi:**

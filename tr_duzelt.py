@@ -454,6 +454,7 @@ KONUSMA_GECERLI = {
     'orda': 'orada', 'burda': 'burada', 'şurda': 'şurada', 'nerde': 'nerede', 'ordan': 'oradan',
     'burdan': 'buradan', 'şurdan': 'şuradan', 'nerden': 'nereden', 'içerde': 'içeride',
     'dışarda': 'dışarıda', 'yukarda': 'yukarıda', 'ilerde': 'ileride',
+    'olum': 'oğlum',
 }
 def _uyumlu_soru_eki(govde, ek):
     """Soru ekinin ünlüsünü gövdenin son ünlüsüne uydur: hanım + mi -> mı, gül + mu -> mü."""
@@ -522,6 +523,17 @@ def _ekle_sil(s, k):
     return 1.2 if (k > 0 and s[k - 1] == s[k]) or (k + 1 < len(s) and s[k + 1] == s[k]) else 2.0
 
 
+_UNLU = frozenset('aeıioöuü')
+
+
+def _ekle(b, j):
+    """Hedefe b[j] harfini eklemenin bedeli. İki ünsüz arasına ünlü eklemek ucuz: yazarken ünlü düşürmek (giriyorm,
+    göndersn, kıymetlisni) harf silmekten (giriyor) çok daha sık. Ölçüm: geliştirme tweetlerindeki yanlışlardan."""
+    if (b[j] in _UNLU and 0 < j < len(b) - 1 and b[j - 1] not in _UNLU and b[j + 1] not in _UNLU):
+        return 1.0
+    return _ekle_sil(b, j)
+
+
 def duzenleme_maliyeti(a, b):
     """Ağırlıklı Damerau-Levenshtein: aksan < ses benzerliği < komşu tuş < rastgele harf."""
     a, b = a.replace("'", ''), b.replace("'", '')
@@ -530,11 +542,11 @@ def duzenleme_maliyeti(a, b):
     for i in range(1, n + 1):
         D[i][0] = D[i - 1][0] + _ekle_sil(a, i - 1)
     for j in range(1, m + 1):
-        D[0][j] = D[0][j - 1] + _ekle_sil(b, j - 1)
+        D[0][j] = D[0][j - 1] + _ekle(b, j - 1)
     for i in range(1, n + 1):
         for j in range(1, m + 1):
             v = D[i - 1][j - 1] + (0.0 if a[i - 1] == b[j - 1] else _degistir(a[i - 1], b[j - 1]))
-            v = min(v, D[i - 1][j] + _ekle_sil(a, i - 1), D[i][j - 1] + _ekle_sil(b, j - 1))
+            v = min(v, D[i - 1][j] + _ekle_sil(a, i - 1), D[i][j - 1] + _ekle(b, j - 1))
             if i > 1 and j > 1 and a[i - 1] == b[j - 2] and a[i - 2] == b[j - 1] and a[i - 1] != a[i - 2]:
                 v = min(v, D[i - 2][j - 2] + 1.5)      # yer değiştirme: zmaan -> zaman
             D[i][j] = v
@@ -813,6 +825,14 @@ class YazimDuzeltici:
             if self.tanidik(c) and (not kisa or self.lm.tekli(c) >= self.lm.tekli(w) + 2.0):
                 ekle(c, min(duzenleme_maliyeti(w, c), C_AKSAN_TAVAN), 'aksan')
         if genis:
+            for c in list(C):
+                if len(c) != 1 or C[c][1] not in ('aksan', 'konuşma dili'):
+                    continue
+                for ek, ayri in (('de', 'de'), ('da', 'da'), ('te', 'de'), ('ta', 'da')):
+                    govde = c[0][:-2]
+                    if c[0].endswith(ek) and len(govde) >= 2 and self.duzgun(govde) and self.lm.idx(govde) > 0:
+                        ekle((govde, ayri), C[c][0] + C_AYIR_EK, 'ayırma')
+        if genis:
             for t in self.tablo.get(w, ()):
                 # tablodaki karşılık da konuşma dili olabilir (cekiyodu -> çekiyodu): yazı diline çevir
                 for c in ([t] if self.duzgun(t) else self.konusma_dili(t)[0]):
@@ -974,7 +994,7 @@ class YazimDuzeltici:
                               if t.startswith(yanlis)), None)
                 if d is None:
                     d = next((dogru + t[len(yanlis):] for yanlis, dogru in KONUSMA_GECERLI.items()
-                              if t.startswith(yanlis)), None)
+                              if yanlis[-2:] in ('da', 'de') and t.startswith(yanlis)), None)
                 if d is None and not self.duzgun(t):
                     m = _SORU_EKI.match(t)
                     if m and len(m.group(1)) >= 2 and self.duzgun(m.group(1)):
