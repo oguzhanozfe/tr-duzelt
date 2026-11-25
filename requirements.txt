@@ -1,0 +1,4 @@
+numpy<2
+setuptools<80
+zemberek-python==0.2.3
+python-crfsuite>=0.9.11
