@@ -1287,7 +1287,8 @@ class Duzeltici:
         self.yazim = YazimDuzeltici(self.lm, os.path.join(os.path.dirname(os.path.abspath(model_yolu)), 'siralayici.json'))
         self.nokta = Noktalayici(model_yolu, self.lm, self.yazim.morph)
 
-    def duzelt(self, metin, paragraf=False, ayrinti=False):
+    def duzelt(self, metin, paragraf=False, ayrinti=False, izle=None):
+        """izle: liste verilirse her aşamanın ara sonucu ona eklenir (--yolculuk bunu yazdırır)."""
         metin = metin.replace('’', "'")
         degisiklikler = []
         # --- 0a) hiç Türkçe karakter yoksa metin ASCII klavyeyle yazılmıştır: önce hepsini geri koy
@@ -1300,6 +1301,8 @@ class Duzeltici:
             from zemberek.normalization.deasciifier.deasciifier import Deasciifier
             metin = Deasciifier(metin).convert_to_turkish()
             degisiklikler.append(('(tüm metin)', 'Türkçe karakterler geri kondu', 'deasciifier'))
+            if izle is not None:
+                izle.append(('deasciifier', metin))
         # --- 0b) metni (ayraç, kelime) parçalarına böl; ayraçlar (boşluk/noktalama) korunur
         kelimeler, ayraclar, son = [], [], 0
         bitisler = []
@@ -1311,6 +1314,8 @@ class Duzeltici:
         kuyruk = metin[son:]
         if not kelimeler:
             return (metin, []) if ayrinti else metin
+        if izle is not None:
+            izle.append(('kelimeler', list(kelimeler)))
         n = len(kelimeler)
         # kullanıcının satır sonu = kesin cümle sonu (uzun satırlar hariç: otomatik kaydırılmış olabilir)
         sert = [False] * n
@@ -1344,6 +1349,10 @@ class Duzeltici:
                             and not kullanici_buyuk[i] and not kullanici_buyuk[i + 1]
                             for i in parca[:-1]]
             cikti = self.yazim.duzelt(girdi, birlesebilir)
+            if izle is not None:
+                genis = self.yazim.siralayici is not None
+                izle.append(('yazım', [(g, self.yazim.adaylar(g, genis), c, kaynak)
+                                       for g, (c, kaynak) in zip(girdi, cikti)]))
             for k, (i, g, (c, kaynak)) in enumerate(zip(parca, girdi, cikti)):
                 # kullanıcının büyük yazdığı ve sıradan kelime olarak çözümlenemeyen kelimelere (ad, yabancı ad) dokunma
                 if kullanici_buyuk[i] and not self.yazim.duzgun(kucuk[i]) and kaynak != 'aynı':
@@ -1447,6 +1456,9 @@ class Duzeltici:
             bicim[a] = tr_capitalize(bicim[a])
 
         # --- 5) paragraf (metinde zaten satır başı varsa dokunma)
+        if izle is not None:
+            izle.append(('noktalama', [(duz[j], nokta[j], kullanici_nokta[j]) for j in range(N)]))
+            izle.append(('büyük harf', [(duz[j], bicim[j]) for j in range(N) if duz[j] != bicim[j]]))
         yeni_paragraf = set()
         if paragraf and '\n' not in metin.strip() and len(cumleler) >= 3:
             lemmalar = []
@@ -1474,9 +1486,50 @@ class Duzeltici:
                     ayrac = re.sub(r'\s+$', '', ayrac) + '\n\n'
                 out.append(ayrac)
         sonuc = ''.join(out)
+        if izle is not None:
+            izle.append(('çıktı', sonuc))
         if ayrinti:
             return sonuc, degisiklikler
         return sonuc
+
+
+def yolculuk_yaz(metin, izle, dosya=sys.stdout):
+    """Bir metnin düzelticiden geçerken uğradığı durakları okunur biçimde yaz."""
+    yaz = lambda *a: print(*a, file=dosya)
+    yaz('GİRDİ\n  ' + metin.strip())
+    for ad, veri in izle:
+        if ad == 'deasciifier':
+            yaz('\n0. DURAK: metinde hiç Türkçe karakter (ç ğ ı ö ş ü) yok; önce onlar geri konur\n  ' + veri.strip())
+        elif ad == 'kelimeler':
+            yaz('\n1. DURAK: kelimelere ayır (%d kelime)\n  %s' % (len(veri), ' | '.join(veri)))
+            yaz('\n2. DURAK: her kelime için adaylar üret, en uygununu seç')
+            yaz('  (yalnızca birden çok seçeneği olan ya da tanınmayan kelimeler gösteriliyor)')
+        elif ad == 'yazım':
+            bekleyen = None
+            for g, adaylar, c, kaynak in veri:
+                if not c:
+                    bekleyen = g                    # sonraki kelimeyle birleşecek
+                    continue
+                if kaynak == 'birleştirme':
+                    yaz('  %-16s -> %-18s [birleştirme: iki parça tek kelime]' % (bekleyen + ' ' + g, ' '.join(c)))
+                    continue
+                digerleri = sorted(((m, ' '.join(a), k) for a, (m, k) in adaylar.items() if a != (g,)))
+                if not digerleri and kaynak == 'aynı':
+                    continue
+                liste = ', '.join('%s (%s)' % (a, k) for _, a, k in digerleri[:5]) or 'yok'
+                if ' '.join(c) == g:
+                    yaz('  %-16s =  korundu%-11s adaylar: %s' % (g, '', liste))
+                else:
+                    yaz('  %-16s -> %-18s [%s]  adaylar: %s' % (g, ' '.join(c), kaynak, liste))
+        elif ad == 'noktalama':
+            parcalar = []
+            for t, n_, k in veri:
+                parcalar.append(t + (k or '') + ({'C': '[,]', 'P': '[.]', 'Q': '[?]'}.get(n_, '') if k is None else ''))
+            yaz('\n3. DURAK: noktalama ([.] [,] [?] = modelin eklediği işaret)\n  ' + ' '.join(parcalar))
+        elif ad == 'büyük harf':
+            yaz('\n4. DURAK: büyük harf ve kesme işareti\n  ' + (', '.join('%s -> %s' % x for x in veri) or '(değişiklik yok)'))
+        elif ad == 'çıktı':
+            yaz('\nÇIKTI\n  ' + veri.strip())
 
 
 def dosya_oku(yol):
@@ -1498,6 +1551,8 @@ def main():
     ap.add_argument('--cikti', help='sonucu ekrana değil bu dosyaya yaz (UTF-8)')
     ap.add_argument('--model', default=os.path.join(os.path.dirname(os.path.abspath(__file__)), 'noktalama.crfsuite'))
     ap.add_argument('--ayrinti', action='store_true', help='yapılan kelime düzeltmelerini de göster')
+    ap.add_argument('--yolculuk', action='store_true',
+                    help='metnin aşamalardan nasıl geçtiğini adım adım göster (hangi kelimeye neden dokunuldu)')
     ap.add_argument('--eval', action='store_true',
                     help='düzeltmeyi Gemini ile uzaktan değerlendir (metni Google’a gönderir)')
     ap.add_argument('--eval-model', default=DEFAULT_MODEL,
@@ -1514,8 +1569,11 @@ def main():
     if args.eval and not api_key:
         ap.error('--eval için GEMINI_API_KEY ortam değişkenini ayarlayın.')
     d = Duzeltici(args.model)
-    sonuc, degisiklikler = d.duzelt(metin, paragraf=args.paragraf, ayrinti=True)
-    if args.cikti:
+    izle = [] if args.yolculuk else None
+    sonuc, degisiklikler = d.duzelt(metin, paragraf=args.paragraf, ayrinti=True, izle=izle)
+    if args.yolculuk:
+        yolculuk_yaz(metin, izle)
+    elif args.cikti:
         with open(args.cikti, 'w', encoding='utf-8', newline='') as f:
             f.write(sonuc)
         print('Yazıldı:', args.cikti)
