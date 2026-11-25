@@ -44,7 +44,10 @@ python olcum/esik_tara.py                                      # sıralayıcı e
 | Dosya | İçerik |
 |---|---|
 | `tr_duzelt.py` | Düzelticinin tamamı (aşağıda) |
-| `siralayici.json` | Öğrenilmiş aday sıralayıcı: 50 öznitelik, 600 ağaç, eşik 0,5 |
+| `siralayici.json` | Öğrenilmiş aday sıralayıcı: 50 öznitelik, eşik 0,7 (25 Kasım'da dev'de seçildi; model aynı) |
+| `siralayici_bert.json` | `--bert` sıralayıcısı: 50 + 5 BERT özniteliği, eşik 0,5 |
+| `noktalama_bert/` | `--bert` noktalama modeli (BERTurk, 211 MB, depoda DEĞİL, .gitignore'da); `egit_noktalama_bert.py` üretir |
+| `ornekler/` | Kendi yazdığımız 20 metin + iki kipin çıktısı (README'deki örnekler buradan) |
 | `noktalama.crfsuite` | CRF noktalama + büyük harf modeli |
 | `egit_siralayici.py`, `egit_noktalama.py` | İki modelin eğitimi |
 | `olcum/veri.py` | Test setlerini kurar (gerçek tweetler + yapay bozma); `Bozucu` eğitimde de kullanılır |
@@ -77,6 +80,11 @@ Tuzaklar:
 - **Yapay testler iyimserdir.** Bozma yöntemi eğitimdekiyle aynı aileden. Asıl gösterge `gercek-test`.
 - **Ölçüm yalnızca yazım aşamasını ölçer** (`YazimDuzeltici.duzelt`, küçük harfli kelimeler). Noktalama `olcum/noktalama_olc.py` ile ayrıca ölçülür (UD Turkish-IMST dev+test; hiçbir model bununla eğitilmedi). `egit_noktalama.py --test-kitap 14 17` de eğitimin sonunda ayrılmış TrMor belgelerinde F1 yazdırıyor. README'deki "öğrenci yazıları" satırını üreten betik de depoda değil.
 - **Windows:** CRFsuite model dosyasının yolunda Türkçe karakter olmasın (eğitirken). Çalışma anında sorun yok, model bellekten açılıyor.
+- **Windows'ta torch ve uzun yol:** venv çok uzun bir klasördeyse `torch` DLL'leri yüklenmez (`WinError 206`). 25 Kasım oturumunda torch'lu ortam kısa yolda kuruldu (`C:\Users\<kullanıcı>\.venvs\trd`).
+- **GPU'yu gizlemek:** Windows'ta `CUDA_VISIBLE_DEVICES=` (boş) işe yaramıyor, `CUDA_VISIBLE_DEVICES=-1` kullan. İşlemci hızını ölçerken buna dikkat et.
+- **BERT tablo üretimi:** 4 süreç + `OMP_NUM_THREADS=4` sorunsuz (~5 dk). 8 süreç 24 GB ekran belleğini taşırdı ve süreçler saatlerce süründü. Tablo üretimiyle noktalama eğitimini aynı anda çalıştırma.
+- **BERT öznitelikleri:** `BertPuan.PENCERE` (adayın iki yanındaki alt parça sayısı) eğitimde ve çalışma anında aynı olmalı (şimdi 40). Değişirse tabloyu yeniden üret. BERT'li tablonun ilk 50 sütunu BERT'siz tablodur: `egit_siralayici.py --tablo ...` (`--bert` olmadan) aynı veriden taban modeli eğitir.
+- **Kural son geçişi** (`_kural_son_gecis`) yalnızca zaten değiştirilmiş kelimelere uygulanır; sıralayıcıdan sonra çalıştığı için tabloları bayatlatmaz. Temiz metni korumak için bu koşulu gevşetme (yazarın kendi "hiç bir"i korunur).
 
 Sıralayıcıyı yeniden eğitmek (depodaki model bu komutlarla üretildi; tablo dosyaları büyük, `olcum/veri/` altında tut):
 
@@ -90,7 +98,7 @@ python olcum/esik_tara.py && python olcum/olc.py
 
 Tablo üretimi iki süreçle 15–25 dakika, tek süreçle (`python egit_siralayici.py`) yaklaşık bir saat sürer. Sonuç bire bir aynı çıkmayabilir, ölçüm gürültüsü kadar oynar.
 
-## Son ölçüm
+## Son ölçüm (25 Kasım 2026, ikinci oturum)
 
 Gerçek tweetler, test bölümü (1.000 tweet, 2.226 hata):
 
@@ -102,11 +110,19 @@ Gerçek tweetler, test bölümü (1.000 tweet, 2.226 hata):
 | Zemberek hazır normalleştirici | %75,0 | %11,6 | %2,44 | 79,4 |
 | tr-duzelt ilk sürüm | %62,8 | %10,7 | %1,39 | 76,8 |
 | tr-duzelt, sıralayıcısız (`tr-duzelt-sezgisel`) | %67,3 | %5,9 | %0,45 | 84,7 |
-| **tr-duzelt, şimdiki** | **%73,7** | **%4,1** | **%0,42** | **88,6** |
+| tr-duzelt, devir anı (`4170084`) | %73,7 | %4,1 | %0,42 | 88,6 |
+| **tr-duzelt, varsayılan (eşik 0,7)** | **%72,7** | **%2,7** | **%0,27** | **89,9** |
+| **tr-duzelt `--bert`** | **%75,7** | **%2,7** | **%0,35** | **90,7** |
+| `--temkinli` (0,9) | %66,0 | %1,9 | %0,12 | 88,5 |
+| `--bert --temkinli` | %68,9 | %1,8 | %0,13 | 89,6 |
 
-Aynı model geliştirme bölümünde: %73,9 / %3,9 / %0,39 / 89,0. Yapay setler: tek hata %86,4 düzeltilen, %4,1 yanlış; yoğun gürültü %86,9 / %3,2; bölünmüş kelime %88,2 / %3,3; araya giren İngilizcede bozma %0,16; temiz metinde %0,18.
+Geliştirme: varsayılan %72,3 / %2,4 / %0,36; `--bert` %74,6 / %2,9 / %0,26. Yapay setler (varsayılan / `--bert`): tek hata %83,8 / %89,0 düzeltilen; üç hata %85,0 / %90,1; yoğun %84,9 / %88,3; temiz metinde bozma %0,12 / %0,14; İngilizcede %0,11 / %0,16.
 
-Hata türüne göre düzeltilen oran (geliştirme): Türkçe karakter eksikliği %93, konuşma dili %73, bilerek uzatma/kısaltma %62, ayrı yazılması gereken %56, yazım hatası %50.
+Noktalama, IMST test F1 (`olcum/noktalama_olc.py`): CRF nokta 0,675 / virgül 0,079 / soru 0,341; `noktalama_bert` (virgül ≥0,7, soru ≥0,6) 0,782 / 0,433 / 0,463, virgül isabeti 0,747.
+
+Hız (yalnızca işlemci, 32 çekirdek): `--toplu` varsayılan 8 süreç 24 satır/sn, 3 süreç 11, `--bert` 8 süreç 17 (2.000 tweet, 8,5 kelime/satır). Tek iş parçacığında kelime seçimi: BERT'siz ~440, BERT'li kapılı int8 ~65 kelime/sn; noktalama BERT ~300.
+
+Bu oturumun commit'leri sırayla: `948a8f7` T5, `95eecd0` noktalama ölçümü, `884582e` + `c0810b1` kural son geçişi, `111223a` aday üretimi + eşik 0,7, `d584c31` BERT kipi, `fb53b0f` toplu mod.
 
 ## Denenip bırakılanlar (yeniden deneme, nedenini bil)
 
@@ -116,7 +132,13 @@ Hata türüne göre düzeltilen oran (geliştirme): Türkçe karakter eksikliği
 - **Çift harfi her yerde uzatma saymak:** `mood → mod`.
 - **Birleştirmede tek harfli parça ya da ve/de/mi gibi işlev kelimesi:** `i de → ide`, `bro ve → bröve`.
 - **Paragraf bölme:** rastgele bölmekten iyi çıkmadı; kodda kapalı duruyor (`--paragraf`).
-- **T5'i ayrı yöntem ya da aday kaynağı olarak kullanmak:** yukarıda, "Sıradaki işler" 2–3.
+- **T5'i ayrı yöntem ya da aday kaynağı olarak kullanmak:** test %19,2 / %8,2 / %1,27; aday kaynağı üst sınırı: tr-duzelt'in kaçırdığı 324 kelimeden 48'i.
+- **Hazır noktalama BERT'i** (`uygarkurt/bert-restore-punctuation-turkish`): cümle sonlarına virgül koyuyor; IMST nokta F1 0,276.
+- **BERTurk uncased** (`dbmdz/bert-base-turkish-128k-uncased`): Türkçe karakterleri siliyor (çok -> cok), PLL ayırt edemiyor. Cased kullan.
+- **BERT'i bütün kelimelere sormak:** işlemcide 13 kelime/sn; kapı (taban olasılığı 0,05-0,98 arası) ile 39, int8 ile 65; doğruluk aynı.
+- **Noktalama BERT'inde int8:** 2 kat hızlı ama virgül F1 0,433 -> 0,400; zaten hızlı olduğu için fp32.
+- **Taban sıralayıcıyı yeni tablolarla yeniden eğitmek:** geliştirmede gürültü düzeyinde (0,5'te %74,6 / %3,4 / %0,37, eski model %74,9 / %3,1 / %0,40); eski model tutuldu.
+- **Eşiği tek başına yükseltmek:** 0,95'te yanlış %2,1 ama düzeltilen %60; kural geçişi + eşik 0,7 daha iyi denge.
 - **Pekiştirmeli öğrenme:** elimizde "bozuk → doğru" çiftleri olduğu için denetimli öğrenme daha verimli; gerek görülmedi.
 
 ## Sıradaki işler
@@ -128,12 +150,13 @@ Hata türüne göre düzeltilen oran (geliştirme): Türkçe karakter eksikliği
    git branch -m main master && git fetch origin && git branch -u origin/master master
    ```
    `gh` yoksa ad değişikliği GitHub'da Settings → Branches'tan yapılır. README'deki indirme bağlantısı dal adından bağımsız; başka değişiklik gerekmez.
-2. ~~T5 ölçümü~~ — yapıldı (25 Kasım 2026): test %19,2 / %8,2 / %1,27. `T5Yazim` ekran kartını kullanıyor.
-3. ~~T5'i aday kaynağı yapmak~~ — üst sınır ölçüldü, yapılmadı: geliştirmede tr-duzelt'in kaçırdığı 324 kelimeden (eşit uzunluklu 723 cümle) T5 yalnızca 48'ini doğru veriyor; yanlış düzeltmeyi azaltmaz, çalışma anına torch + 600 MB getirir.
-4. **Noktalama için BERT.** En büyük kazanç beklenen yer; CRF'in virgül F1'i 0,19–0,33. Ölçüm betiği yazıldı (`olcum/noktalama_olc.py`). Hazır model (`uygarkurt/...`) IMST testinde nokta 0,276 / virgül 0,300 / soru 0,171 — cümle sonlarına virgül koyuyor, kullanılamaz; CRF 0,675 / 0,079 / 0,341. Sıradaki: hazır bir modeli (`uygarkurt/bert-restore-punctuation-turkish`) ya da BERTurk üzerine eğitilmiş bir etiketleyiciyi aynı veride CRF ile karşılaştır. Çalışma anına `torch` bağımlılığı ekleyeceği için isteğe bağlı kalmalı; kararı sahibine sor.
-5. **Bağlam için daha güçlü dil modeli.** Şimdiki model yalnızca yandaki kelimeye bakıyor. BERT'in maskeli dil modeli puanını sıralayıcıya öznitelik olarak eklemek `yaşam/yaşım`, `de/da` gibi durumlara yarayabilir.
+2. ~~T5 ölçümü~~, 3. ~~T5 aday kaynağı~~ — yapıldı, değmedi (yukarıda).
+4. ~~Noktalama için BERT~~ — yapıldı (`--bert`, `noktalama_bert/`). **Açık soru:** 211 MB'lık model depoda değil; GitHub sürümü (release) olarak mı yayımlansın, Hugging Face'e mi konsun, yoksa herkes kendisi mi eğitsin? Sahibine sor.
+5. ~~BERT maskeli dil modeli puanı öznitelik~~ — yapıldı (`siralayici_bert.json`, kapılı).
 6. **Kural büyütme döngüsü.** `--eval` çıktısındaki "olası kural" önerileri → elle doğrula → tabloya ekle → `olcum/olc.py`. İstenirse tablolar ayrı bir dosyaya taşınıp, önerilen kuralı otomatik sınayan bir betik yazılabilir (yanlış biçim Zemberek'te geçersiz mi, doğrusu geçerli mi, temiz metinde bozma artıyor mu).
-7. **Sahibine sorulacaklar:** depoda `LICENSE` yok; depo açıklaması boş. Issue #2 açık, özet yorumu yazıldı; sahibi kendi makinesinde deneyip kapatacak.
+7. **Gelecek zamanın konuşma biçimleri.** `başlicak` (başlayacak), `yagicak` (yağacak), `alcam` (alacağım) çoğu zaman düzelmiyor: ünlü düşmüş/daralmış gelecek zaman için aday üretilmiyor. `konusma_dili`'ne "c/ç'den önceki ı/i'yi a/e(y)a ile değiştir, ünlü yoksa ekle" biçimleri eklenebilir; aday tarafı olduğu için sonra iki sıralayıcıyı da yeniden eğit ve ölç.
+8. **Kalan yanlış düzeltmelerin bir kısmı ölçüt kaynaklı:** altın veri "bi cok" → "birçok" gibi birleştirmeleri tek düzenleme sayıyor; "bi -> bir" kısmi düzeltmesi yanlış sayılıyor. `../logs/yanlis_dev*.txt` türü dökümü `olcum/` altına betik olarak almak işe yarar.
+9. **Sahibine sorulacaklar:** depoda `LICENSE` yok; depo açıklaması boş. Issue #2 açık, özet yorumu yazıldı; sahibi kendi makinesinde deneyip kapatacak.
 
 ## Bilinen hatalar
 
