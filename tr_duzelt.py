@@ -608,8 +608,8 @@ class BertPuan:
         self.cihaz = 'cuda' if torch.cuda.is_available() else 'cpu'
         self.tok = AutoTokenizer.from_pretrained(ad)
         self.model = AutoModelForMaskedLM.from_pretrained(ad).to(self.cihaz).eval()
-        if self.cihaz == 'cpu':     # int8: işlemcide 1,7 kat hızlı; geliştirme tweetlerinde sonuç aynı (%74,8/%2,9/%0,28)
-            self.model = torch.quantization.quantize_dynamic(self.model, {torch.nn.Linear}, dtype=torch.qint8)
+        # int8 denendi (işlemcide 1,7 kat hızlı, sonuç gürültü kadar farklı) ama bırakıldı: hız değil doğruluk önemli ve
+        # tam duyarlıkta işlemcideki sonuç ölçülen sonuçla birebir aynı
         self._ids = {}
 
     def ids(self, kelimeler):
@@ -1582,7 +1582,13 @@ _COK_BOSLUK = re.compile(r'[ \t]{2,}')
 
 class Duzeltici:
     def __init__(self, model_yolu, bert=False):
-        """bert=True: adayları BERTurk'e de puanlatan sıralayıcı (siralayici_bert.json; torch + transformers ister)."""
+        """bert=True: adayları BERTurk'e de puanlatan sıralayıcı (siralayici_bert.json; torch + transformers ister).
+        bert=None: kuruluysa BERT, değilse klasik (komut satırının varsayılanı)."""
+        if bert is None:
+            bert = bert_kurulu()
+            if not bert:
+                print('uyarı: torch/transformers kurulu değil, klasik kip (README: "BERT kipi" kurulumu)', file=sys.stderr)
+        self.bert = bert
         self.lm = DilModeli()
         klasor = os.path.dirname(os.path.abspath(model_yolu))
         self.yazim = YazimDuzeltici(self.lm, os.path.join(klasor, 'siralayici_bert.json' if bert else 'siralayici.json'),
@@ -1856,6 +1862,16 @@ def dosya_oku(yol):
 _ISCI = None
 
 
+def bert_kurulu():
+    """torch ve transformers yüklenebiliyor mu? (BERT kipi varsayılan; yüklenemezse klasik kipe düşülür)"""
+    try:
+        import torch          # noqa: F401  (kurulu olup DLL'i açılamayan torch da OSError verir)
+        import transformers   # noqa: F401
+        return True
+    except Exception:
+        return False
+
+
 def _isci_baslat(model, bert):
     global _ISCI
     _ISCI = Duzeltici(model, bert=bert)
@@ -1935,8 +1951,10 @@ def main():
                     help='sıralayıcının eşiği (0-1): yükseldikçe daha az ama daha emin düzeltir (TR_DUZELT_ESIK ile aynı)')
     ap.add_argument('--temkinli', action='store_true',
                     help='yalnızca çok emin olduğunu düzelt (eşik 0,95): yanlış düzeltme %%2 altı, düzeltilen azalır')
-    ap.add_argument('--bert', action='store_true',
-                    help="kelime seçiminde BERTurk'ün cümle bağlamına da bak (aynı yanlış oranında daha çok düzeltir; torch ister)")
+    ap.add_argument('--bert', dest='bert', action='store_const', const=True, default=None,
+                    help="BERT kipini zorla (varsayılan: torch ve transformers kuruluysa zaten açık)")
+    ap.add_argument('--klasik', dest='bert', action='store_const', const=False,
+                    help='BERT kullanma: yalnızca kurallar + küçük modeller (daha az bozar, daha az düzeltir, noktalama zayıf)')
     ap.add_argument('--paragraf', action='store_true',
                     help='deneysel paragraf bölmeyi aç (ölçümde rastgeleden iyi çıkmadı)')
     args = ap.parse_args()

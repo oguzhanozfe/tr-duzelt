@@ -11,7 +11,7 @@ Bozuk yazılmış Türkçe metni düzeltir: yazım, Türkçe karakter, noktalama
 ## Sahibinin kuralları (bunlara uy)
 
 1. **Çalışma anında LLM yok.** LLM yalnızca yardımcıdır: sonucu denetler (`--eval`, Gemini) ve kural önerir. Öneri elle doğrulanmadan koda girmez.
-2. **ML ağırlıklı, üstüne büyüyen bir kural seti.** Doğruluk hızdan önemli; yerel makinede sürenin uzaması sorun değil.
+2. **ML ağırlıklı, üstüne büyüyen bir kural seti.** Doğruluk hızdan önemli; yerel makinede sürenin uzaması sorun değil. Sahibi 26 Kasım'da yineledi: "hız önemli değil, doğruluk en önemlisi; CPU'da çalışabilecek kadar basit olmalı." Bu yüzden BERT kipi varsayılan, int8 gibi doğruluğu değiştiren hızlandırmalar kullanılmaz. Eğitim için ekran kartı serbest, çalışma anı yalnızca işlemciyle de çalışmalı.
 3. **Emin değilsen dokunma.** Güvenle düzeltilemeyen kelime korunur; yanlış birleştirme/bölme ve anlamsız büyük harf en kötü hata sayılır (issue #2). Bir değişikliği değerlendirirken "bozulan doğru kelime" sütunu "düzeltilen"den önce gelir.
 4. **Git:** yalnızca varsayılan dalda çalış, yan dal açma. Her özelliği ayrı commit yap ve hemen gönder. Commit mesajı Türkçe: ne değişti, neden, ölçümde ne oldu.
 5. **README sade dille ve güncel.** "12 yaşındaki biri bile anlasın": ne nerede nasıl çalışıyor, bir cümlenin yolculuğu, hangi yöntem neden seçildi, hangisi neden seçilmedi; hepsi ölçülmüş sayılarla. Davranışı ya da sayıları değiştiren her commit README'yi de günceller.
@@ -45,8 +45,8 @@ python olcum/esik_tara.py                                      # sıralayıcı e
 |---|---|
 | `tr_duzelt.py` | Düzelticinin tamamı (aşağıda) |
 | `siralayici.json` | Öğrenilmiş aday sıralayıcı: 50 öznitelik, eşik 0,8 (26 Kasım'da yeni adaylarla yeniden eğitildi, eşik dev'de seçildi) |
-| `siralayici_bert.json` | `--bert` sıralayıcısı: 50 + 5 BERT özniteliği, eşik 0,8; de/da ayırmada eşik 0,2 düşük (`BERT_AYIRMA_FARK`) |
-| `noktalama_bert/` | `--bert` noktalama modeli (BERTurk, 211 MB, depoda DEĞİL, .gitignore'da); `egit_noktalama_bert.py` üretir |
+| `siralayici_bert.json` | BERT kipinin (varsayılan) sıralayıcısı: 50 + 5 BERT özniteliği, eşik 0,8; de/da ayırmada eşik 0,2 düşük (`BERT_AYIRMA_FARK`) |
+| `noktalama_bert/` | BERT kipinin noktalama modeli (BERTurk, 211 MB, depoda DEĞİL, .gitignore'da); `egit_noktalama_bert.py` üretir |
 | `ornekler/` | Kendi yazdığımız 20 metin + iki kipin çıktısı (README'deki örnekler buradan) |
 | `noktalama.crfsuite` | CRF noktalama + büyük harf modeli |
 | `egit_siralayici.py`, `egit_noktalama.py` | İki modelin eğitimi |
@@ -112,16 +112,16 @@ Gerçek tweetler, test bölümü (1.000 tweet, 2.226 hata):
 | tr-duzelt ilk sürüm | %62,8 | %10,7 | %1,39 | 76,8 |
 | tr-duzelt, sıralayıcısız (`tr-duzelt-sezgisel`) | %67,3 | %5,9 | %0,45 | 84,7 |
 | tr-duzelt, devir anı (`4170084`) | %73,7 | %4,1 | %0,42 | 88,6 |
-| **tr-duzelt, varsayılan (eşik 0,8)** | **%73,6** | **%2,6** | **%0,20** | **90,5** |
-| **tr-duzelt `--bert`** | **%76,1** | **%2,2** | **%0,27** | **91,5** |
-| `--temkinli` (0,95) | %63,3 | %1,7 | %0,13 | 87,6 |
-| `--bert --temkinli` (0,95) | %67,6 | %1,6 | %0,17 | 89,2 |
+| tr-duzelt `--klasik` (eşik 0,8) | **%73,6** | **%2,6** | **%0,20** | **90,5** |
+| **tr-duzelt varsayılan (BERT kipi)** | **%76,1** | **%2,2** | **%0,27** | **91,5** |
+| `--klasik --temkinli` (0,95) | %63,3 | %1,7 | %0,13 | 87,6 |
+| `--temkinli` (BERT, 0,95) | %67,6 | %1,6 | %0,17 | 89,2 |
 
 Geliştirme: varsayılan %74,5 / %2,5 / %0,24; `--bert` %74,9 / %2,7 / %0,28; `--temkinli` 0,95'te %64,0 / %1,9 / %0,19 (0,9'da %70,0 / %2,0 / %0,23; 0,95 seçildi çünkü önceki temkinli kipin bozulanını aşmıyor). Yapay setler (varsayılan / `--bert`): tek hata %80,2 / %84,9 düzeltilen; üç hata %82,2 / %86,0; yoğun %82,3 / %85,4; temiz metinde bozma %0,12 / %0,12; İngilizcede %0,11 / %0,12.
 
 Noktalama, IMST test F1 (`olcum/noktalama_olc.py`): CRF nokta 0,675 / virgül 0,079 / soru 0,341; `noktalama_bert` (virgül ≥0,7, soru ≥0,6) 0,782 / 0,433 / 0,463, virgül isabeti 0,747.
 
-Hız (yalnızca işlemci, 32 çekirdek): `--toplu` varsayılan 8 süreç 37 satır/sn, 3 süreç 15, `--bert` 8 süreç 18 (2.000 tweet, 8,5 kelime/satır). Tek iş parçacığında kelime seçimi: BERT'siz ~440, BERT'li kapılı int8 ~65 kelime/sn; noktalama BERT ~300. Bellek: süreç başına ~1 GB, `--bert` ~2,5 GB.
+Hız (yalnızca işlemci, 32 çekirdek, 2.000 tweet, 8,5 kelime/satır): `--toplu` BERT kipi (fp32) 8 süreç 14 satır/sn; `--klasik` 8 süreç 37, 3 süreç 15. Tek iş parçacığında kelime seçimi: klasik ~440, BERT'li kapılı fp32 ~40 kelime/sn; noktalama BERT ~300. Bellek: süreç başına BERT ~2,5 GB, klasik ~1 GB. Kapı (BELIRSIZ_ALT/UST) doğruluğu değiştirmiyor: kapısız BERT geliştirmede 0,8'de birebir aynı.
 
 Bu oturumların commit'leri sırayla: `948a8f7` T5, `95eecd0` noktalama ölçümü, `884582e` + `c0810b1` kural son geçişi, `111223a` aday üretimi + eşik 0,7, `d584c31` BERT kipi, `fb53b0f` toplu mod, `8429a28` noktalama modeli sürümü, `29bb95e` BERT bellek düzeltmesi, ardından aday üretimi 2 + yeniden eğitilen sıralayıcılar (eşik 0,8).
 
@@ -137,6 +137,7 @@ Bu oturumların commit'leri sırayla: `948a8f7` T5, `95eecd0` noktalama ölçüm
 - **Hazır noktalama BERT'i** (`uygarkurt/bert-restore-punctuation-turkish`): cümle sonlarına virgül koyuyor; IMST nokta F1 0,276.
 - **BERTurk uncased** (`dbmdz/bert-base-turkish-128k-uncased`): Türkçe karakterleri siliyor (çok -> cok), PLL ayırt edemiyor. Cased kullan.
 - **BERT'i bütün kelimelere sormak:** işlemcide 13 kelime/sn; kapı (taban olasılığı 0,05-0,98 arası) ile 39, int8 ile 65; doğruluk aynı.
+- **Kelime seçiminde int8:** 1,7 kat hızlı, geliştirme sayıları gürültü kadar farklı, ama 2.000 tweetin 84'ünde çıktı değişti; doğruluk önce geldiği için kaldırıldı (26 Kasım).
 - **Noktalama BERT'inde int8:** 2 kat hızlı ama virgül F1 0,433 -> 0,400; zaten hızlı olduğu için fp32.
 - **Taban sıralayıcıyı yeni tablolarla yeniden eğitmek:** geliştirmede gürültü düzeyinde (0,5'te %74,6 / %3,4 / %0,37, eski model %74,9 / %3,1 / %0,40); eski model tutuldu.
 - **de/da adayında her zaman BERT'e sormak (kapıyı açmak):** tek başına sıfır kazanç; asıl sorun eşikti (BERT `ben de`ye 0,60 veriyor, eşik 0,8). Çözüm `BERT_AYIRMA_FARK`.

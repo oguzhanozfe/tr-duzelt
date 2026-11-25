@@ -7,7 +7,7 @@ Girdi : bugun 3 mayista ankarada bulustuk tatlımmm cok guzeldi tmm mı
 Çıktı : Bugün 3 Mayıs'ta Ankara'da buluştuk. Tatlım çok güzeldi. Tamam mı?
 ```
 
-Bunu yaparken **yapay zekâ sohbet modeli (LLM) kullanmaz**. Her şey kendi bilgisayarınızda çalışır, internet ve ekran kartı gerekmez, kelime başına para (token) harcanmaz. İçinde iki küçük "öğrenmiş" model ve bir avuç kural var; hepsi aşağıda tek tek anlatılıyor.
+Bunu yaparken **yapay zekâ sohbet modeli (LLM) kullanmaz**. Her şey kendi bilgisayarınızda çalışır, ekran kartı gerekmez, kelime başına para (token) harcanmaz. İçinde bir avuç kural, iki küçük "öğrenmiş" model ve cümlenin bağlamını anlamak için BERTurk adlı bir dil modeli var. BERTurk işlemcide çalışır ve ilk kullanımda bir kez indirilir. Kurulu değilse düzeltici onsuz da çalışır. Hepsi aşağıda tek tek anlatılıyor.
 
 En önemli ilkesi: **emin değilse dokunmaz.** Yanlış bir kelimeyi olduğu gibi bırakmak, doğru bir kelimeyi bozmaktan iyidir.
 
@@ -180,8 +180,8 @@ Her seçim ölçülerek yapıldı. Ölçüm verisi: gerçek insanların yazdığ
 | tr-duzelt, ilk sürüm | %62,8 | %10,7 | %1,39 |
 | tr-duzelt, elle ayarlı kurallar (sıralayıcısız) | %67,3 | %5,9 | %0,45 |
 | tr-duzelt, öğrenilmiş sıralayıcı (25 Kasım) | %73,7 | %4,1 | %0,42 |
-| **tr-duzelt, şimdiki: + kural son geçişi, yeni adaylar, eşik 0,8** | **%73,6** | **%2,6** | **%0,20** |
-| **tr-duzelt `--bert`: belirsiz kelimede BERTurk'e de sorar** | **%76,1** | **%2,2** | **%0,27** |
+| tr-duzelt `--klasik`: + kural son geçişi, yeni adaylar, eşik 0,8; BERT yok | %73,6 | %2,6 | %0,20 |
+| **tr-duzelt, şimdiki (varsayılan): belirsiz kelimede BERTurk'e de sorar** | **%76,1** | **%2,2** | **%0,27** |
 
 Tek tek gerekçeler:
 
@@ -202,7 +202,7 @@ pip install torch transformers sentencepiece
 python olcum/olc.py --sistem t5 --set gercek-test
 ```
 
-Kelimenin ne demek istediğini anlamak için daha küçük ve daha uygun bir sinir ağı işe yaradı: [BERTurk](https://github.com/stefan-it/turkish-bert). İsteğe bağlı; aşağıda ["BERT kipi"](#bert-kipi-isteğe-bağlı).
+Kelimenin ne demek istediğini anlamak için daha küçük ve daha uygun bir sinir ağı işe yaradı: [BERTurk](https://github.com/stefan-it/turkish-bert). Kuruluysa varsayılan olarak açık; aşağıda ["BERT kipi"](#bert-kipi-varsayılan).
 
 **Neden LLM değil?** Büyük bir sohbet modeli bu işi büyük olasılıkla daha iyi yapar. Ama her metin için para ya da güçlü bir makine ister, metni dışarı gönderir ve bazen kimsenin istemediği yerleri de "güzelleştirir". Bu projede LLM yalnızca yardımcıdır: sonucu denetler ve kural önerir ([aşağıda](#kural-eklemek-ve-llmin-rolü)).
 
@@ -249,35 +249,36 @@ Bu tablo eğitim betiğinin kendi ayırdığı belgelerden. Her yöntemi **aynı
 |---|---|---|---|
 | Bizim CRF (düzelticinin kullandığı ayarlarla) | 0,675 | 0,079 | 0,341 |
 | Hazır BERT modeli ([uygarkurt/bert-restore-punctuation-turkish](https://huggingface.co/uygarkurt/bert-restore-punctuation-turkish)) | 0,276 | 0,300 | 0,171 |
-| **Bizim BERTurk etiketleyicimiz (`--bert`)** | **0,782** | **0,433** | **0,463** |
+| **Bizim BERTurk etiketleyicimiz (varsayılan)** | **0,782** | **0,433** | **0,463** |
 
 Hazır BERT modeli kendi model kartında nokta için 0,96 bildiriyor ama burada cümle sonlarının çoğuna nokta yerine virgül koyuyor (`güzeldi, dışarı çıktık, sonra eve döndük,`). Bu haliyle kullanılamaz. Bizim CRF'in virgülü düşük çünkü düzeltici onu bilerek çok temkinli çalıştırıyor: yalnızca çok emin olduğu yere virgül koyuyor. Kendi BERTurk etiketleyicimiz CRF'le aynı veriyle eğitildi ve üç işarette de ondan iyi; koyduğu virgüllerin %75'i doğru (CRF'te %69).
 
-## BERT kipi (isteğe bağlı)
+## BERT kipi (varsayılan)
 
-`--bert` iki şeyi değiştirir. İkisi de [BERTurk](https://huggingface.co/dbmdz/bert-base-turkish-cased) üzerine kurulu. BERTurk, milyarlarca kelimelik Türkçe metinle eğitilmiş, cümlenin tamamına bakan bir dil modeli (110 milyon parametre). Sohbet modeli değil: metin üretmez, yalnızca puan verir.
+torch ve transformers kuruluysa düzeltici BERT kipinde çalışır. `--klasik` onu kapatır. Kurulu değilse uyarı verip klasik kipe geçer. BERT kipi iki şeyi değiştirir. İkisi de [BERTurk](https://huggingface.co/dbmdz/bert-base-turkish-cased) üzerine kurulu. BERTurk, milyarlarca kelimelik Türkçe metinle eğitilmiş, cümlenin tamamına bakan bir dil modeli (110 milyon parametre). Sohbet modeli değil: metin üretmez, yalnızca puan verir.
 
-1. **Kelime seçimi.** Varsayılan sıralayıcı yalnızca yandaki kelimelere bakabiliyor. `olum` mu `ölüm` mü `oğlum` mu, `bende` mi `ben de` mi? Bunu çoğu zaman cümlenin geri kalanı söyler. BERT kipinde, taban sıralayıcının **emin olamadığı** kelimelerde her aday cümlenin içine konup BERTurk'e sorulur: "Bu cümlede bu kelime ne kadar olası?" Bu puan sıralayıcıya beş yeni ipucu olarak girer. Sıralayıcı bu ipuçlarıyla yeniden eğitildi (`siralayici_bert.json`). Emin olunan kelimelere BERT hiç sorulmaz; işlemcide süreyi üç kat kısaltan şey bu.
+1. **Kelime seçimi.** Klasik sıralayıcı yalnızca yandaki kelimelere bakabiliyor. `olum` mu `ölüm` mü `oğlum` mu, `bende` mi `ben de` mi? Bunu çoğu zaman cümlenin geri kalanı söyler. BERT kipinde, klasik sıralayıcının **emin olamadığı** kelimelerde her aday cümlenin içine konup BERTurk'e sorulur: "Bu cümlede bu kelime ne kadar olası?" Bu puan sıralayıcıya beş yeni ipucu olarak girer. Sıralayıcı bu ipuçlarıyla yeniden eğitildi (`siralayici_bert.json`). Emin olunan kelimelere BERT sorulmaz. Bütün kelimelere sormak geliştirme tweetlerinde aynı sonucu verdi, yalnızca daha yavaştı.
 2. **Noktalama.** CRF'in yerine BERTurk üzerine eğittiğimiz noktalama etiketleyicisi (`noktalama_bert/`). Büyük harfi yine CRF verir. Virgülü ancak %70'ten, soru işaretini %60'tan eminse koyar.
 
 Sonuç (gerçek tweetler, test):
 
 | | Düzeltilen | Yanlış düzeltilen | Bozulan |
 |---|---|---|---|
-| Varsayılan | %73,6 | %2,6 | %0,20 |
-| `--bert` | %76,1 | %2,2 | %0,27 |
-| `--temkinli` (eşik 0,95) | %63,3 | %1,7 | %0,13 |
-| `--bert --temkinli` | %67,6 | %1,6 | %0,17 |
+| **Varsayılan (BERT)** | **%76,1** | **%2,2** | %0,27 |
+| `--temkinli` (eşik 0,95) | %67,6 | **%1,6** | %0,17 |
+| `--klasik` | %73,6 | %2,6 | %0,20 |
+| `--klasik --temkinli` | %63,3 | %1,7 | %0,13 |
 
-Test tweetlerinde `--bert` daha çok ve daha az yanlış düzeltiyor; bozulan doğru kelime biraz daha yüksek (%0,27'ye karşı %0,20). Geliştirme tweetlerinde iki kip yakın (%74,9 / %2,7 / %0,28 ile %74,5 / %2,5 / %0,24). Yani kelime seçimindeki fark ölçüm gürültüsünü pek aşmıyor; en görünür kazancı `bende` → `ben de` gibi bağlam isteyen kararlar. Yapay testlerde fark daha açık: cümlede tek yazım hatası %80'den %85'e, üç yazım hatası %82'den %86'ya. `--bert`'in asıl kazancı noktalamada.
+Test tweetlerinde BERT kipi daha çok ve daha az yanlış düzeltiyor; bozulan doğru kelime biraz daha yüksek (%0,27'ye karşı %0,20). Geliştirme tweetlerinde iki kip yakın (%74,9 / %2,7 / %0,28 ile %74,5 / %2,5 / %0,24). Yani kelime seçimindeki fark ölçüm gürültüsünü pek aşmıyor; en görünür kazancı `bende` → `ben de` gibi bağlam isteyen kararlar. Yapay testlerde fark daha açık: cümlede tek yazım hatası %80'den %85'e, üç yazım hatası %82'den %86'ya. Asıl kazanç noktalamada (yukarıdaki tablo).
 
-**Ekran kartı gerekmez.** İşlemcide kelime seçimindeki BERTurk otomatik olarak 8 bitlik tam sayı hesabına geçer: 1,7 kat hızlı, sonuç aynı (geliştirme tweetlerinde %74,8 / %2,9 / %0,28). Tek çekirdekte kelime seçimi saniyede ~65 kelime (aynı ölçümde BERT'siz ~440), noktalama ~300 kelime. Ekran kartı varsa kendiliğinden kullanılır.
+**Ekran kartı gerekmez.** İşlemcide tam duyarlıkla çalışır, sonuç ekran kartındakiyle birebir aynıdır. (8 bitlik hızlı hesap denendi: 1,7 kat hızlı ama 2.000 tweetin 84'ünde çıktı değişti; doğruluk önce geldiği için kullanılmıyor.) Tek çekirdekte kelime seçimi saniyede ~40 kelime, noktalama ~300 kelime. Ekran kartı varsa kendiliğinden kullanılır.
 
 Kurulum:
 
 ```bash
-pip install torch transformers          # yalnızca CPU: pip install torch --index-url https://download.pytorch.org/whl/cpu
-python tr_duzelt.py --bert "olum sen ordayim diyosun ama gelmedin"
+pip install torch --index-url https://download.pytorch.org/whl/cpu    # yalnızca işlemci sürümü (~200 MB)
+pip install transformers
+python tr_duzelt.py "olum sen ordayim diyosun ama gelmedin"
 ```
 
 İlk çalıştırmada BERTurk (~440 MB) Hugging Face'ten iner. Noktalama modeli (`noktalama_bert/`, 211 MB) depoda değil, [sürümler sayfasında](https://github.com/oguzhanozfe/tr-duzelt/releases/tag/noktalama-bert-v1). `noktalama_bert.zip` dosyasını indirip `tr_duzelt.py`'nin bulunduğu klasöre açın:
@@ -287,11 +288,11 @@ Invoke-WebRequest https://github.com/oguzhanozfe/tr-duzelt/releases/download/nok
 Expand-Archive noktalama_bert.zip -DestinationPath .
 ```
 
-Klasör yoksa `--bert` noktalamayı CRF'le yapar, kelime seçimi yine BERT'li çalışır. Modeli kendiniz de eğitebilirsiniz (ekran kartıyla birkaç dakika; aşağıda).
+Klasör yoksa noktalama CRF'le yapılır, kelime seçimi yine BERT'li çalışır. Modeli kendiniz de eğitebilirsiniz (ekran kartıyla birkaç dakika; aşağıda).
 
 ## Yapamadıkları
 
-- **Yazımı doğru, anlamı yanlış kelimeler.** `yaşam küçük` (doğrusu `yaşım küçük`), `oldum/öldüm` gibi durumlarda iki kelime de geçerli Türkçedir. Doğrusunu seçmek cümleyi anlamayı gerektirir; varsayılan kip yalnızca yandaki kelimelere bakabiliyor. `--bert` bazılarını yakalar; emin olmadığı için çoğunu bırakır.
+- **Yazımı doğru, anlamı yanlış kelimeler.** `yaşam küçük` (doğrusu `yaşım küçük`), `oldum/öldüm` gibi durumlarda iki kelime de geçerli Türkçedir. Doğrusunu seçmek cümleyi anlamayı gerektirir; klasik kip yalnızca yandaki kelimelere bakabiliyor. BERT kipi bazılarını yakalar; emin olmadığı için çoğunu bırakır.
 - **de/da ve ki.** `bende → ben de` artık bazen düzeliyor, ama güvenilir değil: gerçek tweetlerde bitişik yazılmış kelime hatalarının yaklaşık yarısı düzeltiliyor.
 - **Birden çok harfi yanlış kelimeler.** `dokmusa` (dolmuşa) gibi iki harfi birden yanlış kelimeler için aday üretilemiyor; kelime korunur.
 - **Virgül.** Model yalnızca çok emin olduğunda virgül koyar; eksik virgül çok kalır.
@@ -349,6 +350,17 @@ uv pip install -r requirements.txt
 
 `uv venv`, bilgisayarda Python 3.11 yoksa onu kendisi indirir. İkinci komut yaklaşık 115 MB indirir (çoğu Zemberek'in dil modeli).
 
+**3b. BERT kipi (önerilen, daha doğru).** Ekran kartı gerekmez:
+
+```powershell
+uv pip install torch --index-url https://download.pytorch.org/whl/cpu
+uv pip install transformers
+Invoke-WebRequest https://github.com/oguzhanozfe/tr-duzelt/releases/download/noktalama-bert-v1/noktalama_bert.zip -OutFile noktalama_bert.zip
+Expand-Archive noktalama_bert.zip -DestinationPath .
+```
+
+Bu adımı atlarsanız düzeltici klasik kipte çalışır. Klasör yolunun çok uzun olması torch'u bozar (`WinError 206`); proje klasörünü kısa bir yola koyun (ör. `C:\tr-duzelt`).
+
 **4. Çalıştırın.**
 
 ```powershell
@@ -377,7 +389,7 @@ python tr_duzelt.py --yolculuk "..."                       # adım adım: hangi 
 python tr_duzelt.py --dosya girdi.txt --ayrinti            # yapılan kelime düzeltmelerini de listeler
 python tr_duzelt.py --dosya girdi.txt --cikti cikti.txt    # sonucu UTF-8 dosyaya yazar
 python tr_duzelt.py --temkinli "..."                        # yalnızca çok emin olduğunu düzeltir (yanlış %2'nin altında)
-python tr_duzelt.py --bert "..."                            # cümlenin tamamına bakar (bkz. BERT kipi)
+python tr_duzelt.py --klasik "..."                          # BERT'siz: daha az düzeltir, daha az bozar, noktalama zayıf
 ```
 
 **Büyük dökümler (100 bin – 200 bin metin).** Her satırı ayrı bir metin sayar, çıktıya aynı sırayla satır satır yazar:
@@ -385,40 +397,42 @@ python tr_duzelt.py --bert "..."                            # cümlenin tamamın
 ```bash
 python tr_duzelt.py --toplu dokum.txt --cikti duzeltilmis.txt              # varsayılan: çekirdek - 1 süreç, en çok 8
 python tr_duzelt.py --toplu dokum.txt --cikti duzeltilmis.txt --isci 3     # dizüstü: 3 süreç
-python tr_duzelt.py --toplu dokum.txt --cikti duzeltilmis.txt --bert       # BERT kipi
+python tr_duzelt.py --toplu dokum.txt --cikti duzeltilmis.txt --klasik     # BERT'siz
 ```
 
 - Girdideki her satıra çıktıda tam bir satır karşılık gelir. Bir satırda beklenmedik bir hata olursa o satır olduğu gibi yazılır, iş durmaz.
 - Yarıda kalırsa (elektrik, Ctrl+C) aynı komutu yeniden çalıştırın: çıktıda bitmiş satırlar atlanır, kalan yerden devam eder.
-- Her süreç varsayılan kipte ~1 GB, `--bert` ile ~2,5 GB bellek tutar. İlerleme ve tahmini kalan süre ekrana yazılır.
+- Her süreç BERT kipinde ~2,5 GB, `--klasik` ile ~1 GB bellek tutar. İlerleme ve tahmini kalan süre ekrana yazılır.
 
 Ölçülen süreler. Girdi: 2.000 gerçek tweet, satır başına ortalama 8,5 kelime. İlk geçiş, önbellek soğukken. 32 çekirdekli bir masaüstü, ekran kartı kapalı:
 
 | Kip | Süreç | Saniyede satır | 100 bin metin | 200 bin metin |
 |---|---|---|---|---|
-| Varsayılan | 8 | 37 | ~45 dk | ~1,5 saat |
-| Varsayılan | 3 (dizüstü gibi) | 15 | ~1,8 saat | ~3,6 saat |
-| `--bert`, yalnızca işlemci | 8 | 18 | ~1,6 saat | ~3,2 saat |
+| Varsayılan (BERT), yalnızca işlemci | 8 | 14 | ~2 saat | ~4 saat |
+| `--klasik` | 8 | 37 | ~45 dk | ~1,5 saat |
+| `--klasik` | 3 (dizüstü gibi) | 15 | ~1,8 saat | ~3,6 saat |
 
-Metinleriniz daha uzunsa süre kelime sayısıyla orantılı uzar (8 süreçle saniyede ~300 kelime).
+Metinleriniz daha uzunsa süre kelime sayısıyla orantılı uzar (8 süreçle saniyede BERT kipinde ~120, klasik kipte ~300 kelime).
 
-Kendi yazdığımız 20 düzeltilmemiş metin ve iki kipin çıktısı `ornekler/` klasöründe (`girdi.txt`, `cikti.txt`, `cikti_bert.txt`). Bu metinler bu sürümde eklenen kuralları (`olum`, `ordayim`, `hersey`, `giriyorm`, `bi kac`) göstermek için yazıldı; asıl kanıt yukarıdaki gerçek tweet testi. `cikti_bert.txt` depoda olmayan `noktalama_bert/` modeliyle üretildi. Bir kaçı:
+Kendi yazdığımız 20 düzeltilmemiş metin ve iki kipin çıktısı `ornekler/` klasöründe (`girdi.txt`; `cikti.txt` klasik, `cikti_bert.txt` BERT). Bu metinler bu sürümde eklenen kuralları (`olum`, `ordayim`, `hersey`, `giriyorm`, `bi kac`) göstermek için yazıldı; asıl kanıt yukarıdaki gerçek tweet testi. `cikti_bert.txt` depoda olmayan `noktalama_bert/` modeliyle üretildi. Bir kaçı:
 
-| Girdi | Varsayılan | `--bert` |
+| Girdi | `--klasik` | Varsayılan (BERT) |
 |---|---|---|
 | herkez bu filmi izlemis bende izlemek istiyorum ama vaktim yok | Herkes bu filmi izlemiş bende izlemek istiyorum ama vaktim yok. | Herkes bu filmi izlemiş. Ben de izlemek istiyorum ama vaktim yok. |
 | hocam odevi yarina kadar teslim edebilirmiyiz cok yogunuz bu hafta | Hocam ödevi yarına kadar teslim edebilir miyiz? Çok yoğunuz. Bu hafta. | Hocam ödevi yarına kadar teslim edebilir miyiz? Çok yoğunuz bu hafta. |
 | yarin hava nasil olcak bilen varmi yagmur yagicak mi | Yarın hava nasıl olacak bilen var mı? Yağmur yağacak mı? | Yarın hava nasıl olacak? Bilen var mı? Yağmur yağacak mı? |
 | giriyorm simdi toplantiya sonra konusuruz tmm mı | Giriyorum şimdi. Toplantıya sonra konuşuruz tamam mı? | Giriyorum şimdi toplantıya. Sonra konuşuruz tamam mı? |
 
-İlk satır iki kipin farkını gösteriyor: `bende` → `ben de` gibi kararlar bağlam ister; varsayılan kip emin olamayıp dokunmuyor, `--bert` cümlenin tamamına bakıp ayırıyor. Hâlâ düzelmeyenler: `alcam` (alacağım), `kardeslerimde` (kardeşlerim de), `haftaici` (hafta içi).
+İlk satır iki kipin farkını gösteriyor: `bende` → `ben de` gibi kararlar bağlam ister; klasik kip emin olamayıp dokunmuyor, BERT kipi cümlenin tamamına bakıp ayırıyor. Hâlâ düzelmeyenler: `alcam` (alacağım), `kardeslerimde` (kardeşlerim de), `haftaici` (hafta içi).
 
 **Ne kadar cesur olsun?** `TR_DUZELT_ESIK` ortam değişkeni sıralayıcının eşiğini değiştirir (varsayılan 0,8; geliştirme tweetlerinde seçildi). Yükseltirseniz daha az ama daha emin düzeltir. Gerçek tweetlerin test bölümünde:
 
 | Eşik | Düzeltilen | Yanlış düzeltilen | Bozulan |
 |---|---|---|---|
-| 0,8 (varsayılan) | %73,6 | %2,6 | %0,20 |
-| 0,95 (`--temkinli`) | %63,3 | %1,7 | %0,13 |
+| 0,8 (varsayılan) | %76,1 | %2,2 | %0,27 |
+| 0,95 (`--temkinli`) | %67,6 | %1,6 | %0,17 |
+
+(BERT kipi. `--klasik` ile: 0,8'de %73,6 / %2,6 / %0,20, 0,95'te %63,3 / %1,7 / %0,13.)
 
 ```powershell
 $env:TR_DUZELT_ESIK = "0.9"      # PowerShell;  Linux/macOS: TR_DUZELT_ESIK=0.9 python tr_duzelt.py ...
@@ -454,8 +468,8 @@ print(d.duzelt("herkez geldimi bilmiyorum"))
 | `noktalama.crfsuite` | Öğrenilmiş noktalama + büyük harf modeli (5,6 MB) |
 | `egit_siralayici.py` | Sıralayıcıyı eğitir (cümleleri bozar, adayları çıkarır, modeli kurar) |
 | `egit_noktalama.py` | Noktalama modelini eğitir |
-| `siralayici_bert.json` | `--bert` kipinin sıralayıcısı: aynı 50 ipucu + BERTurk'ün 5 ipucu (1,3 MB) |
-| `egit_noktalama_bert.py` | `--bert` kipinin noktalama modelini (`noktalama_bert/`) eğitir |
+| `siralayici_bert.json` | BERT kipinin sıralayıcısı: aynı 50 ipucu + BERTurk'ün 5 ipucu (1,3 MB) |
+| `egit_noktalama_bert.py` | BERT kipinin noktalama modelini (`noktalama_bert/`) eğitir |
 | `olcum/` | Ölçüm düzeneği: `veri.py` test setlerini kurar, `olcut.py` sayar, `sistemler.py` karşılaştırılan yöntemler, `olc.py` çalıştırır; `hata_turleri.py` hata türüne göre döküm verir, `esik_tara.py` sıralayıcının eşiğini tarar |
 | `tr_eval.py`, `tests/` | İsteğe bağlı Gemini denetimi ve testleri (kural geçişi ve BERT kararı için de) |
 | `ornekler/` | Kendi yazdığımız 20 düzeltilmemiş metin ve iki kipin çıktısı |
