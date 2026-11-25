@@ -444,6 +444,10 @@ TAM_DUZELT = {
     'napıyorsun': 'ne yapıyorsun', 'napıyosun': 'ne yapıyorsun', 'slm': 'selam', 'mrb': 'merhaba',
     'tmm': 'tamam', 'tşk': 'teşekkürler', 'bn': 'ben', 'sn': 'sen', 'çk': 'çok', 'gzl': 'güzel', 'gbi': 'gibi',
     'nbr': 'ne haber', 'cvp': 'cevap', 'öle': 'öyle', 'böle': 'böyle', 'şöle': 'şöyle', 'sora': 'sonra',
+    # zarf/zamir + bağlaç de: bu biçimler bitişik hiçbir zaman doğru değil (bulunma eki almazlar)
+    'şimdide': 'şimdi de', 'hiçde': 'hiç de', 'hiçte': 'hiç de', 'öylede': 'öyle de', 'böylede': 'böyle de',
+    'şöylede': 'şöyle de', 'sonrada': 'sonra da', 'buradada': 'burada da', 'burdada': 'burada da',
+    'oradada': 'orada da', 'ordada': 'orada da',
 }
 # Geçerli ama konuşma diline ait biçimler: dil modeli de isterse yazı diline çevrilir
 KONUSMA_GECERLI = {
@@ -451,6 +455,15 @@ KONUSMA_GECERLI = {
     'burdan': 'buradan', 'şurdan': 'şuradan', 'nerden': 'nereden', 'içerde': 'içeride',
     'dışarda': 'dışarıda', 'yukarda': 'yukarıda', 'ilerde': 'ileride',
 }
+def _uyumlu_soru_eki(govde, ek):
+    """Soru ekinin ünlüsünü gövdenin son ünlüsüne uydur: hanım + mi -> mı, gül + mu -> mü."""
+    son = next((h for h in reversed(govde) if h in 'aeıioöuü'), None)
+    if son is None:
+        return ek
+    u = {'a': 'ı', 'ı': 'ı', 'e': 'i', 'i': 'i', 'o': 'u', 'u': 'u', 'ö': 'ü', 'ü': 'ü'}[son]
+    return ''.join(u if h in 'ıiuü' else h for h in ek)
+
+
 _SORU_EKI = re.compile(r'^(.+?)(m[ıiuü](?:y[ıiuü]m|s[ıiuü]n|y[ıiuü]z|s[ıiuü]n[ıiuü]z|d[ıiuü]r|yd[ıiuü][mnk]?)?)$')
 KISA_KELIMELER = {'ve', 'de', 'da', 'ki', 'bu', 'şu', 'o', 'ne', 'mi', 'mı', 'mu', 'mü', 'ya', 'en'}
 
@@ -832,10 +845,10 @@ class YazimDuzeltici:
         m = _SORU_EKI.match(w)
         if m and len(m.group(1)) >= 3:
             if self.duzgun(m.group(1)):                      # atarmısınız -> atar mısınız
-                ekle((m.group(1), m.group(2)), C_AYIR, 'ayırma')
+                ekle((m.group(1), _uyumlu_soru_eki(m.group(1), m.group(2))), C_AYIR, 'ayırma')
             else:                                            # gelcekmisin -> gelecek misin
                 for c in self.konusma_dili(m.group(1))[0]:
-                    ekle((c, m.group(2)), C_AYIR + C_KONUSMA, 'ayırma')
+                    ekle((c, _uyumlu_soru_eki(c, m.group(2))), C_AYIR + C_KONUSMA, 'ayırma')
         n = len(w)
         for k in range(1, n):                                # eksik boşluk: vebeni -> ve beni
             a, b = w[:k], w[k:]
@@ -940,12 +953,16 @@ class YazimDuzeltici:
         self._guven_denetimi(kelimeler, sonuc, tek)
         if self.siralayici is not None:
             self._siralayici_karari(kelimeler, sonuc)
-        self._kural_son_gecis(kelimeler, sonuc)
+        self._kural_son_gecis(kelimeler, sonuc, birlesebilir)
         return self._gercek_kelime(sonuc)
 
-    def _kural_son_gecis(self, kelimeler, sonuc):
-        """Seçilen düzeltme, kural tablolarının "yanlış" dediği bir biçimse onu da düzelt: hersey -> (aksan) herşey ->
-        her şey, bıde -> bide -> bir de. Aday üretimi girdiye bakar; seçilen adayın kendisi tablodan geçmemiş olabilir."""
+    def _kural_son_gecis(self, kelimeler, sonuc, birlesebilir=None):
+        """Seçilen düzeltmeyi bir kez de kurallardan geçir. Aday üretimi girdiye bakar; seçilen adayın kendisi kural
+        tablolarından geçmemiş olabilir. Yalnızca zaten değiştirilmiş kelimelere dokunur (korunan kelime korunur):
+          - tablonun "yanlış" dediği biçim: hersey -> (aksan) herşey -> her şey; bıde -> bide -> bir de
+          - konuşma dili gövdesi: ordayim -> ordayım -> oradayım; burdakiler -> buradakiler
+          - bitişik soru eki, ünlü uyumuyla: varmi -> varmı -> var mı
+        Ayrıca TDK'ye göre her zaman bitişik yazılan hiçbir/birkaç/herhangi: hic bi -> hiç bir -> hiçbir."""
         for i, (c, kaynak) in enumerate(sonuc):
             if not c or c == (kelimeler[i],) or kaynak == 'sözlük':
                 continue
@@ -955,10 +972,28 @@ class YazimDuzeltici:
                 if d is None:
                     d = next((dogru + t[len(yanlis):] for yanlis, dogru in GOVDE_DUZELT.items()
                               if t.startswith(yanlis)), None)
+                if d is None:
+                    d = next((dogru + t[len(yanlis):] for yanlis, dogru in KONUSMA_GECERLI.items()
+                              if t.startswith(yanlis)), None)
+                if d is None and not self.duzgun(t):
+                    m = _SORU_EKI.match(t)
+                    if m and len(m.group(1)) >= 2 and self.duzgun(m.group(1)):
+                        d = m.group(1) + ' ' + _uyumlu_soru_eki(m.group(1), m.group(2))
                 parca = d.split() if d else [t]
                 yeni += parca if all(self.gecerli(x) for x in parca) else [t]
             if tuple(yeni) != c:
                 sonuc[i] = (tuple(yeni), 'sözlük')
+        for i in range(len(sonuc) - 1):
+            a, b = sonuc[i][0], sonuc[i + 1][0]
+            if len(a) != 1 or len(b) != 1 or (birlesebilir is not None and not birlesebilir[i]):
+                continue
+            if ((a[0] == 'hiç' and b[0].startswith('bir')) or (a[0] == 'her' and b[0].startswith('hangi'))
+                    or (a[0], b[0]) == ('bir', 'kaç')):
+                j = a[0] + b[0]
+                # yalnızca biri zaten düzeltildiyse (hic bi -> hiçbir); yazarın kendi yazdığı "hiç bir" korunur
+                if self.duzgun(j) and (a, b) != ((kelimeler[i],), (kelimeler[i + 1],)):   # hiç birlikte -> birleşmez
+                    sonuc[i] = ((), 'birleştirme')
+                    sonuc[i + 1] = ((j,), 'birleştirme')
 
     # ---- öğrenilmiş sıralayıcı: her aday için "bu aday doğru mu?" olasılığı ----
     def _deasciifier(self, kelimeler):

@@ -1,17 +1,35 @@
 import unittest
 from types import SimpleNamespace
 
-from tr_duzelt import YazimDuzeltici
+from tr_duzelt import YazimDuzeltici, _uyumlu_soru_eki
 
 
 class KuralSonGecisTests(unittest.TestCase):
     """Seçilen düzeltme tablodaki bir yanlış biçimse o da düzeltilir (Zemberek yüklemeden, sahte gecerli ile)."""
 
     def gecis(self, kelimeler, sonuc):
-        sahte = SimpleNamespace(gecerli=lambda w: True)
+        gecersiz = {'varmı', 'hanımmi'}
+        sahte = SimpleNamespace(gecerli=lambda w: True, duzgun=lambda w: w not in gecersiz)
         sonuc = list(sonuc)
         YazimDuzeltici._kural_son_gecis(sahte, kelimeler, sonuc)
         return sonuc
+
+    def test_soru_eki_uyumu(self):
+        self.assertEqual(_uyumlu_soru_eki('hanım', 'mi'), 'mı')
+        self.assertEqual(_uyumlu_soru_eki('gül', 'musun'), 'müsün')
+        self.assertEqual(_uyumlu_soru_eki('geldin', 'mı'), 'mi')
+
+    def test_bitisik_soru_eki_ayrilir(self):
+        self.assertEqual(self.gecis(['varmi'], [(('varmı',), 'aksan')]), [(('var', 'mı'), 'sözlük')])
+
+    def test_konusma_govdesi(self):
+        self.assertEqual(self.gecis(['ordayim'], [(('ordayım',), 'aksan')]), [(('oradayım',), 'sözlük')])
+
+    def test_hicbir_yalniz_duzeltilmisse_birlesir(self):
+        self.assertEqual(self.gecis(['hic', 'bi'], [(('hiç',), 'aksan'), (('bir',), 'sözlük')]),
+                         [((), 'birleştirme'), (('hiçbir',), 'birleştirme')])
+        self.assertEqual(self.gecis(['hiç', 'bir'], [(('hiç',), 'aynı'), (('bir',), 'aynı')]),
+                         [(('hiç',), 'aynı'), (('bir',), 'aynı')])
 
     def test_aksan_secimi_tablodan_gecer(self):
         self.assertEqual(self.gecis(['hersey'], [(('herşey',), 'aksan')]), [(('her', 'şey'), 'sözlük')])
