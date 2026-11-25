@@ -175,6 +175,7 @@ Her seçim ölçülerek yapıldı. Ölçüm verisi: gerçek insanların yazdığ
 |---|---|---|---|
 | Zemberek yazım denetleyicisi (bağlama bakmadan ilk öneri) | %33,5 | %28,6 | %1,47 |
 | SymSpell (kelime listesi + harf mesafesi) | %42,0 | %45,1 | %11,82 |
+| T5 yazım modeli (142 milyon parametre, hazır) | %19,2 | %8,2 | %1,27 |
 | Zemberek'in hazır normalleştiricisi | %75,0 | %11,6 | %2,44 |
 | tr-duzelt, ilk sürüm | %62,8 | %10,7 | %1,39 |
 | tr-duzelt, elle ayarlı kurallar (sıralayıcısız) | %67,3 | %5,9 | %0,45 |
@@ -192,14 +193,14 @@ Tek tek gerekçeler:
 
 **Neden Türkçe karakterleri baştan topluca geri koymuyoruz?** Zemberek'te bunu yapan hazır bir araç var (Deasciifier). Tümüyle Türkçe karaktersiz yazılmış 364 tweette denedik: tek başına kullanınca doğru kelimelerin %2'sini bozuyor (`go → gö`). Şimdi yalnızca sıralayıcıya "ikinci görüş" olarak danışılıyor; son kararı sıralayıcı veriyor.
 
-**Neden daha büyük bir sinir ağı (T5, BERT) değil?** Olabilir, ama henüz ölçemedik. Hugging Face'te Türkçe yazım için eğitilmiş 142 milyon parametreli bir T5 var ([cguzel/trspell-t5-efficient-small](https://huggingface.co/cguzel/trspell-t5-efficient-small)); işlemcide çalışır. Bu depoyu geliştirdiğimiz ortam o siteye erişemediği için denenemedi. Sizin makinenizde aynı veride ölçmek için:
+**Neden hazır bir sinir ağı (T5) değil?** Hugging Face'te Türkçe yazım için eğitilmiş 142 milyon parametreli bir T5 var ([cguzel/trspell-t5-efficient-small](https://huggingface.co/cguzel/trspell-t5-efficient-small)). Aynı tweetlerde ölçtük (tablodaki satır): hataların yalnızca %19'unu düzeltiyor, doğru kelimelerin %1,3'ünü bozuyor. Tweet dilini (`bugun`, `cok`, `dicem`) tanımıyor; temiz metinde eğitilmiş. Onu ayrı bir "aday kaynağı" olarak eklemenin de üst sınırını ölçtük: bizim düzelticinin kaçırdığı kelimelerin yalnızca %15'ine doğru öneri getiriyor (geliştirme bölümünde 324 kelimeden 48'i), üstüne 600 MB model ve ekran kartı/uzun süre istiyor. Değmedi. Kendiniz ölçmek için:
 
 ```bash
 pip install torch transformers sentencepiece
 python olcum/olc.py --sistem t5 --set gercek-test
 ```
 
-Beklenen artısı: iki-üç harfi birden yanlış kelimeleri de düzeltebilir. Beklenen eksisi: cümleyi baştan yazdığı için doğru kelimeleri de değiştirebilir, yaklaşık 600 MB yer ister ve yavaştır. Mantıklı kullanım yeri, onun önerisini yukarıdaki yedi kaynağın yanına **sekizinci aday kaynağı** olarak ekleyip kararı yine sıralayıcıya bırakmaktır. Noktalama için de aynı durum geçerli: BERT tabanlı modeller ([BERTurk](https://github.com/stefan-it/turkish-bert) üzerine eğitilmiş olanlar) bu işin bilinen en iyi yöntemi; virgülde bizim modelden belirgin biçimde iyiler. Sıradaki büyük adım bu.
+Noktalama içinse durum farklı: BERT tabanlı modeller ([BERTurk](https://github.com/stefan-it/turkish-bert) üzerine eğitilmiş olanlar) bu işin bilinen en iyi yöntemi; virgülde bizim modelden belirgin biçimde iyiler. Sıradaki büyük adım bu.
 
 **Neden LLM değil?** Büyük bir sohbet modeli bu işi büyük olasılıkla daha iyi yapar. Ama her metin için para ya da güçlü bir makine ister, metni dışarı gönderir ve bazen kimsenin istemediği yerleri de "güzelleştirir". Bu projede LLM yalnızca yardımcıdır: sonucu denetler ve kural önerir ([aşağıda](#kural-eklemek-ve-llmin-rolü)).
 

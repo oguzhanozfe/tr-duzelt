@@ -145,11 +145,12 @@ class T5Yazim:
         self.ad = 't5:' + model
         self.torch = torch
         self.tok = AutoTokenizer.from_pretrained(model)
-        self.model = AutoModelForSeq2SeqLM.from_pretrained(model)
+        self.cihaz = 'cuda' if torch.cuda.is_available() else 'cpu'
+        self.model = AutoModelForSeq2SeqLM.from_pretrained(model).to(self.cihaz)
         self.model.eval()
 
     def __call__(self, kelimeler):
-        girdi = self.tok(' '.join(kelimeler), return_tensors='pt', truncation=True, max_length=256)
+        girdi = self.tok(' '.join(kelimeler), return_tensors='pt', truncation=True, max_length=256).to(self.cihaz)
         with self.torch.no_grad():
             cikti = self.model.generate(**girdi, num_beams=5, max_length=256, early_stopping=True)
         metin = self.tok.decode(cikti[0], skip_special_tokens=True)

@@ -98,6 +98,7 @@ Gerçek tweetler, test bölümü (1.000 tweet, 2.226 hata):
 |---|---|---|---|---|
 | Zemberek yazım denetleyicisi, bağlamsız | %33,5 | %28,6 | %1,47 | 46,0 |
 | SymSpell | %42,0 | %45,1 | %11,82 | 36,6 |
+| T5 (`cguzel/trspell-t5-efficient-small`) | %19,2 | %8,2 | %1,27 | 43,1 |
 | Zemberek hazır normalleştirici | %75,0 | %11,6 | %2,44 | 79,4 |
 | tr-duzelt ilk sürüm | %62,8 | %10,7 | %1,39 | 76,8 |
 | tr-duzelt, sıralayıcısız (`tr-duzelt-sezgisel`) | %67,3 | %5,9 | %0,45 | 84,7 |
@@ -115,6 +116,7 @@ Hata türüne göre düzeltilen oran (geliştirme): Türkçe karakter eksikliği
 - **Çift harfi her yerde uzatma saymak:** `mood → mod`.
 - **Birleştirmede tek harfli parça ya da ve/de/mi gibi işlev kelimesi:** `i de → ide`, `bro ve → bröve`.
 - **Paragraf bölme:** rastgele bölmekten iyi çıkmadı; kodda kapalı duruyor (`--paragraf`).
+- **T5'i ayrı yöntem ya da aday kaynağı olarak kullanmak:** yukarıda, "Sıradaki işler" 2–3.
 - **Pekiştirmeli öğrenme:** elimizde "bozuk → doğru" çiftleri olduğu için denetimli öğrenme daha verimli; gerek görülmedi.
 
 ## Sıradaki işler
@@ -126,8 +128,8 @@ Hata türüne göre düzeltilen oran (geliştirme): Türkçe karakter eksikliği
    git branch -m main master && git fetch origin && git branch -u origin/master master
    ```
    `gh` yoksa ad değişikliği GitHub'da Settings → Branches'tan yapılır. README'deki indirme bağlantısı dal adından bağımsız; başka değişiklik gerekmez.
-2. **T5 ölçümü.** `olcum/sistemler.py` içindeki `T5Yazim` yazıldı ama **hiç çalıştırılmadı** (önceki ortam Hugging Face'e erişemiyordu); ilk denemede hata verebilir. `python olcum/olc.py --sistem t5 --set gercek-test` çalıştır, düzelt, sonucu README tablosuna ekle. Model kartına göre girdi küçük harfli ve noktalamasız olmalı, en çok 256 token; yalnızca yazım düzeltir.
-3. **T5 önerisini sekizinci aday kaynağı yapmak.** Cümleyi T5'e ver, çıktısındaki kelimeleri aday olarak ekle (yeni `kaynak` + öznitelik), sıralayıcıyı yeniden eğit, ölç. Beklenen kazanç: iki harfi birden yanlış kelimeler (`dokmusa → dolmuşa`).
+2. ~~T5 ölçümü~~ — yapıldı (25 Kasım 2026): test %19,2 / %8,2 / %1,27. `T5Yazim` ekran kartını kullanıyor.
+3. ~~T5'i aday kaynağı yapmak~~ — üst sınır ölçüldü, yapılmadı: geliştirmede tr-duzelt'in kaçırdığı 324 kelimeden (eşit uzunluklu 723 cümle) T5 yalnızca 48'ini doğru veriyor; yanlış düzeltmeyi azaltmaz, çalışma anına torch + 600 MB getirir.
 4. **Noktalama için BERT.** En büyük kazanç beklenen yer; CRF'in virgül F1'i 0,19–0,33. Önce bağımsız bir noktalama ölçüm betiği yaz (`olcum/` altına), sonra hazır bir modeli (`uygarkurt/bert-restore-punctuation-turkish`) ya da BERTurk üzerine eğitilmiş bir etiketleyiciyi aynı veride CRF ile karşılaştır. Çalışma anına `torch` bağımlılığı ekleyeceği için isteğe bağlı kalmalı; kararı sahibine sor.
 5. **Bağlam için daha güçlü dil modeli.** Şimdiki model yalnızca yandaki kelimeye bakıyor. BERT'in maskeli dil modeli puanını sıralayıcıya öznitelik olarak eklemek `yaşam/yaşım`, `de/da` gibi durumlara yarayabilir.
 6. **Kural büyütme döngüsü.** `--eval` çıktısındaki "olası kural" önerileri → elle doğrula → tabloya ekle → `olcum/olc.py`. İstenirse tablolar ayrı bir dosyaya taşınıp, önerilen kuralı otomatik sınayan bir betik yazılabilir (yanlış biçim Zemberek'te geçersiz mi, doğrusu geçerli mi, temiz metinde bozma artıyor mu).
