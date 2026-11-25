@@ -1,7 +1,7 @@
 import unittest
 from types import SimpleNamespace
 
-from tr_duzelt import YazimDuzeltici, _uyumlu_soru_eki
+from tr_duzelt import YazimDuzeltici, _uyumlu_soru_eki, _gelecek_zaman
 
 
 class KuralSonGecisTests(unittest.TestCase):
@@ -47,6 +47,19 @@ class KuralSonGecisTests(unittest.TestCase):
         sonuc = [(('herşey',), 'aksan')]
         YazimDuzeltici._kural_son_gecis(sahte, ['hersey'], sonuc)
         self.assertEqual(sonuc, [(('herşey',), 'aksan')])
+
+
+class GelecekZamanTests(unittest.TestCase):
+    def test_daralmis_gelecek_zaman(self):
+        self.assertIn('bekleyecez', _gelecek_zaman('beklicez'))
+        self.assertIn('başlayacak', _gelecek_zaman('başlicak'))
+        self.assertIn('yagacak', _gelecek_zaman('yagicak'))
+        self.assertIn('alacam', _gelecek_zaman('alcam'))
+        self.assertIn('gidecektin', _gelecek_zaman('gidicektin'))
+
+    def test_ilgisiz_kelimeye_bicim_uretmez(self):
+        self.assertEqual(_gelecek_zaman('dicem'), [])      # gövde tek harf: tahmin yürütme
+        self.assertEqual(_gelecek_zaman('kitap'), [])
 
 
 if __name__ == '__main__':

@@ -34,7 +34,7 @@ Bu bir prototiptir. Neyi ne kadar yapabildiği ve **yapamadığı** ölçümleri
 | kardeşim 3 mayısta doğdu o zamanlar izmirde yaşıyorduk babam bir fabrikada çalışıyordu | Kardeşim 3 Mayıs'ta doğdu. O zamanlar İzmir'de yaşıyorduk. Babam bir fabrikada çalışıyordu. |
 | herkez 1994de doğmuş gibi davranıyo yanlız ben 2000li yılların çocuğuyum | Herkes 1994'te doğmuş gibi davranıyor. Yalnız ben 2000'li yılların çocuğuyum. |
 | dun aksam arkadaslarimla sinemaya gittik film cok guzeldi sonra yemek yedik eve gec geldim | Dün akşam arkadaşlarımla sinemaya gittik. Film çok güzeldi. Sonra yemek yedik. Eve geç geldim. |
-| dün arkadaşım ahmetle buluştuk o bana yeni telefonunu gösterdi çok beğendim bende almak istiyorum ama param yok | Dün arkadaşım Ahmet'le buluştuk. O bana yeni telefonunu gösterdi. Çok beğendim. Ben de almak istiyorum ama param yok. |
+| dün arkadaşım ahmetle buluştuk o bana yeni telefonunu gösterdi çok beğendim bende almak istiyorum ama param yok | Dün arkadaşım Ahmet'le buluştuk. O bana yeni telefonunu gösterdi. Çok beğendim bende almak istiyorum ama param yok. |
 | benım arkadasım dıye geldıııı ama cooook yoruldummm yaaa, boyle olmaz kii | Benim arkadaşım diye geldi ama çok yoruldum. Yaaa, böyle olmaz ki. |
 | bu aksam mac var here we go again diyoruz ama cringe olmasin bro | Bu akşam maç var. Here we go again diyoruz ama cringe olmasın bro. |
 
@@ -57,7 +57,7 @@ GİRDİ
 
 2. DURAK: her kelime için adaylar üret, en uygununu seç
   (yalnızca birden çok seçeneği olan ya da tanınmayan kelimeler gösteriliyor)
-  bugun            -> bugün              [aksan]  adaylar: bugün (aksan)
+  bugun            -> bugün              [aksan]  adaylar: bugün (aksan), buğun (aksan)
   mayista          -> mayıs'ta           [yazım]  adaylar: mayısta (aksan), mayıs'ta (yazım), mayıs da (ayırma)
   bulustuk         -> buluştuk           [aksan]  adaylar: buluştuk (aksan)
   tatlımmm         -> tatlım             [konuşma dili]  adaylar: tatlım (konuşma dili)
@@ -180,8 +180,8 @@ Her seçim ölçülerek yapıldı. Ölçüm verisi: gerçek insanların yazdığ
 | tr-duzelt, ilk sürüm | %62,8 | %10,7 | %1,39 |
 | tr-duzelt, elle ayarlı kurallar (sıralayıcısız) | %67,3 | %5,9 | %0,45 |
 | tr-duzelt, öğrenilmiş sıralayıcı (25 Kasım) | %73,7 | %4,1 | %0,42 |
-| **tr-duzelt, şimdiki: + kural son geçişi, yeni adaylar, eşik 0,7** | **%72,7** | **%2,7** | **%0,27** |
-| **tr-duzelt `--bert`: belirsiz kelimede BERTurk'e de sorar** | **%75,7** | **%2,7** | **%0,35** |
+| **tr-duzelt, şimdiki: + kural son geçişi, yeni adaylar, eşik 0,8** | **%73,6** | **%2,6** | **%0,20** |
+| **tr-duzelt `--bert`: belirsiz kelimede BERTurk'e de sorar** | **%75,8** | **%2,2** | **%0,25** |
 
 Tek tek gerekçeler:
 
@@ -212,10 +212,10 @@ Yukarıdaki tablo gerçek veriydi. Bir de temiz cümleleri **bilerek bozup** ger
 
 | Test (düzeltilen / yanlış düzeltilen) | İlk sürüm | Zemberek normalleştirici | tr-duzelt (şimdiki) |
 |---|---|---|---|
-| Cümlede tek yazım hatası | %90 / %10 | %75 / %23 | **%84 / %2** |
-| Cümlede üç yazım hatası | %91 / %8 | %74 / %23 | **%85 / %3** |
+| Cümlede tek yazım hatası | %90 / %10 | %75 / %23 | **%80 / %2** |
+| Cümlede üç yazım hatası | %91 / %8 | %74 / %23 | **%83 / %2** |
 | Ortasından bölünmüş kelime (`orma na`) | %0 / hepsi | %70 / %28 | **%88 / %2** |
-| Yoğun gürültü: hepsi bir arada + araya İngilizce | %74 / %21 | %71 / %23 | **%85 / %2** |
+| Yoğun gürültü: hepsi bir arada + araya İngilizce | %74 / %21 | %71 / %23 | **%83 / %2** |
 | Araya giren İngilizce: bozulan kelime | %1,50 | %3,08 | **%0,11** |
 | Temiz metin: bozulan kelime | %0,32 | %1,32 | **%0,12** |
 
@@ -264,12 +264,12 @@ Sonuç (gerçek tweetler, test):
 
 | | Düzeltilen | Yanlış düzeltilen | Bozulan |
 |---|---|---|---|
-| Varsayılan | %72,7 | %2,7 | %0,27 |
-| `--bert` | %75,7 | %2,7 | %0,35 |
-| `--temkinli` (eşik 0,9) | %66,0 | %1,9 | %0,12 |
-| `--bert --temkinli` | %68,9 | %1,8 | %0,13 |
+| Varsayılan | %73,6 | %2,6 | %0,20 |
+| `--bert` | %75,8 | %2,2 | %0,25 |
+| `--temkinli` (eşik 0,9) | %69,5 | %2,2 | %0,17 |
+| `--bert --temkinli` | %72,1 | **%1,6** | %0,20 |
 
-`--bert` aynı yanlış oranında daha çok düzeltir. Test tweetlerinde bozulan doğru kelime biraz daha yüksek (%0,35'e karşı %0,27), geliştirme tweetlerinde ise daha düşük (%0,26'ya karşı %0,36). Fark ölçüm gürültüsü kadar. Yapay testlerde düzeltmedeki fark daha açık: cümlede tek yazım hatası %84'ten %89'a, üç yazım hatası %85'ten %90'a.
+Test tweetlerinde `--bert` daha çok ve daha az yanlış düzeltiyor; bozulan doğru kelime biraz daha yüksek (%0,25'e karşı %0,20). Geliştirme tweetlerinde iki kip neredeyse aynı (%74,7 / %2,8 / %0,24 ile %74,6 / %2,5 / %0,24). Yani kelime seçimindeki fark ölçüm gürültüsünü pek aşmıyor. Yapay testlerde fark daha açık: cümlede tek yazım hatası %80'den %86'ya, üç yazım hatası %83'ten %87'ye. `--bert`'in asıl kazancı noktalamada.
 
 **Ekran kartı gerekmez.** İşlemcide kelime seçimindeki BERTurk otomatik olarak 8 bitlik tam sayı hesabına geçer: 1,7 kat hızlı, sonuç aynı (geliştirme tweetlerinde %74,8 / %2,9 / %0,28). Tek çekirdekte kelime seçimi saniyede ~65 kelime (aynı ölçümde BERT'siz ~440), noktalama ~300 kelime. Ekran kartı varsa kendiliğinden kullanılır.
 
@@ -297,7 +297,7 @@ Klasör yoksa `--bert` noktalamayı CRF'le yapar, kelime seçimi yine BERT'li ç
 - **Virgül.** Model yalnızca çok emin olduğunda virgül koyar; eksik virgül çok kalır.
 - **Devrik cümle, konuşma, liste.** Noktalama modeli düz anlatımda iyi, bunlarda zayıf. `Aslan kaçtı ormana` cümlesini `Aslan kaçtı. Ormana…` diye bölebilir.
 - **Paragraf.** Denenen yöntem rastgele bölmekten iyi çıkmadı; kodda duruyor ama kapalı (`--paragraf`).
-- **Hız.** `zemberek-python` saf Python olduğu için yavaş: açılış yaklaşık 20 saniye, sonra tek süreçte saniyede kabaca 25-35 kelime (bütün aşamalar). Büyük dökümler için `--toplu` birden çok süreç kullanır; süreler [Kullanım](#kullanım) bölümünde.
+- **Hız.** `zemberek-python` saf Python olduğu için yavaş: açılış yaklaşık 20 saniye, sonra tek süreçte saniyede kabaca 40 kelime (bütün aşamalar). Büyük dökümler için `--toplu` birden çok süreç kullanır; süreler [Kullanım](#kullanım) bölümünde.
 
 ## Kural eklemek ve LLM'in rolü
 
@@ -396,11 +396,11 @@ python tr_duzelt.py --toplu dokum.txt --cikti duzeltilmis.txt --bert       # BER
 
 | Kip | Süreç | Saniyede satır | 100 bin metin | 200 bin metin |
 |---|---|---|---|---|
-| Varsayılan | 8 | 24 | ~70 dk | ~2,3 saat |
-| Varsayılan | 3 (dizüstü gibi) | 11 | ~2,5 saat | ~5 saat |
-| `--bert`, yalnızca işlemci | 8 | 17 | ~1,6 saat | ~3,3 saat |
+| Varsayılan | 8 | 37 | ~45 dk | ~1,5 saat |
+| Varsayılan | 3 (dizüstü gibi) | 15 | ~1,8 saat | ~3,6 saat |
+| `--bert`, yalnızca işlemci | 8 | 18 | ~1,6 saat | ~3,2 saat |
 
-Metinleriniz daha uzunsa süre kelime sayısıyla orantılı uzar (8 süreçle saniyede ~200 kelime).
+Metinleriniz daha uzunsa süre kelime sayısıyla orantılı uzar (8 süreçle saniyede ~300 kelime).
 
 Kendi yazdığımız 20 düzeltilmemiş metin ve iki kipin çıktısı `ornekler/` klasöründe (`girdi.txt`, `cikti.txt`, `cikti_bert.txt`). Bu metinler bu sürümde eklenen kuralları (`olum`, `ordayim`, `hersey`, `giriyorm`, `bi kac`) göstermek için yazıldı; asıl kanıt yukarıdaki gerçek tweet testi. `cikti_bert.txt` depoda olmayan `noktalama_bert/` modeliyle üretildi. Bir kaçı:
 
@@ -408,18 +408,17 @@ Kendi yazdığımız 20 düzeltilmemiş metin ve iki kipin çıktısı `ornekler
 |---|---|---|
 | herkez bu filmi izlemis bende izlemek istiyorum ama vaktim yok | Herkes bu filmi izlemiş bende izlemek istiyorum ama vaktim yok. | Herkes bu filmi izlemiş. Ben de izlemek istiyorum ama vaktim yok. |
 | hocam odevi yarina kadar teslim edebilirmiyiz cok yogunuz bu hafta | Hocam ödevi yarına kadar teslim edebilir miyiz? Çok yoğunuz. Bu hafta. | Hocam ödevi yarına kadar teslim edebilir miyiz? Çok yoğunuz bu hafta. |
-| yarin hava nasil olcak bilen varmi yagmur yagicak mi | Yarın hava nasıl olacak bilen var mı? Yağmur yagicak mi? | Yarın hava nasıl olacak? Bilen var mı? Yağmur yagicak mı? |
+| yarin hava nasil olcak bilen varmi yagmur yagicak mi | Yarın hava nasıl olacak bilen var mı? Yağmur yağacak mı? | Yarın hava nasıl olacak? Bilen var mı? Yağmur yağacak mı? |
 | giriyorm simdi toplantiya sonra konusuruz tmm mı | Giriyorum şimdi. Toplantıya sonra konuşuruz tamam mı? | Giriyorum şimdi toplantıya. Sonra konuşuruz tamam mı? |
 
-Son iki satır kalan zayıflıkları da gösteriyor: `yagicak` (yağacak) gibi gelecek zamanın konuşma biçimleri her zaman düzelmiyor.
+İlk satır iki kipin farkını gösteriyor: `bende` → `ben de` gibi kararlar bağlam ister; varsayılan kip emin olamayıp dokunmuyor, `--bert` cümlenin tamamına bakıp ayırıyor. Hâlâ düzelmeyenler: `alcam` (alacağım), `kardeslerimde` (kardeşlerim de), `haftaici` (hafta içi).
 
-**Ne kadar cesur olsun?** `TR_DUZELT_ESIK` ortam değişkeni sıralayıcının eşiğini değiştirir (varsayılan 0,7; geliştirme tweetlerinde seçildi). Yükseltirseniz daha az ama daha emin düzeltir. Gerçek tweetlerin test bölümünde:
+**Ne kadar cesur olsun?** `TR_DUZELT_ESIK` ortam değişkeni sıralayıcının eşiğini değiştirir (varsayılan 0,8; geliştirme tweetlerinde seçildi). Yükseltirseniz daha az ama daha emin düzeltir. Gerçek tweetlerin test bölümünde:
 
 | Eşik | Düzeltilen | Yanlış düzeltilen | Bozulan |
 |---|---|---|---|
-| 0,5 | %74,4 | %3,6 | %0,43 |
-| 0,7 (varsayılan) | %72,7 | %2,7 | %0,27 |
-| 0,9 | %66,0 | %1,9 | %0,12 |
+| 0,8 (varsayılan) | %73,6 | %2,6 | %0,20 |
+| 0,9 (`--temkinli`) | %69,5 | %2,2 | %0,17 |
 
 ```powershell
 $env:TR_DUZELT_ESIK = "0.9"      # PowerShell;  Linux/macOS: TR_DUZELT_ESIK=0.9 python tr_duzelt.py ...

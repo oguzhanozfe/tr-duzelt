@@ -435,6 +435,8 @@ GOVDE_DUZELT = {
     'şuan': 'şu an', 'dahada': 'daha da',
     # TDK'de her bağlamda ayrı yazılanlar (boş vermek, peş peşe, sağ olmak, bir gün)
     'boşver': 'boş ver', 'peşpeşe': 'peş peşe', 'sağolsun': 'sağ olsun', 'sağolun': 'sağ olun', 'birgün': 'bir gün',
+    'hoşgel': 'hoş gel', 'hoşçakal': 'hoşça kal', 'birdaha': 'bir daha', 'bidaha': 'bir daha', 'üstüste': 'üst üste',
+    'sarfet': 'sarf et', 'bişey': 'bir şey', 'biyer': 'bir yer', 'iyiki': 'iyi ki', 'demekki': 'demek ki',
 }
 # Tam eşleşme: kısaltmalar ve bitişik yazılan bağlaçlar
 TAM_DUZELT = {
@@ -519,6 +521,20 @@ def _degistir(a, b):
     return 2.6
 
 
+_GELECEK = re.compile(r'^(.*?[bcçdfgğhjklmnprsştvyz])[ıiuü]y?(c[ae].*)$')
+
+
+def _gelecek_zaman(w):
+    """Gelecek zamanın daralmış konuşma biçimleri: beklicez -> bekleyecez, başlicak -> başlayacak, yagicak -> yağacak,
+    alcam -> alacam. Gövde ünlüsünün ne olduğu bilinmediği için a/e ve -y- ile -y-'siz biçimler üretilir; Türkçe
+    olmayanları sonraki adımda çözümleyici eler."""
+    m = _GELECEK.match(w) or re.match(r'^(.*?[bcçdfgğhjklmnprsştvyz])(c[ae][mkzn].*)$', w)
+    if not m or len(m.group(1)) < 2:
+        return []
+    govde, ek = m.group(1), m.group(2)
+    return [govde + u + ('y' + ek[1] if y else '') + ek for u in 'ae' for y in (False, True)]
+
+
 def _ekle_sil(s, k):
     return 1.2 if (k > 0 and s[k - 1] == s[k]) or (k + 1 < len(s) and s[k + 1] == s[k]) else 2.0
 
@@ -571,6 +587,9 @@ OZNITELIK_ADLARI = (
 BERT_OZNITELIKLER = ['bert_pll', 'bert_ort', 'bert_kazanc', 'bert_sonsal', 'bert_sira']
 # Taban sıralayıcının en iyi adaya verdiği olasılık bu aralıktaysa BERT'e de sorulur; dışındaysa karar taban sıralayıcınındır
 BELIRSIZ_ALT, BELIRSIZ_UST = 0.05, 0.98
+# BERT kipinde de/da ayırmanın eşiği genel eşikten bu kadar düşük. Geliştirme tweetlerinde (eşik 0,8): fark 0 -> %74,7 /
+# %2,8 / %0,24; 0,2 -> %75,1 / %2,8 / %0,28 (bende -> ben de); 0,3 -> %75,2 / %2,8 / %0,29. Temiz metinde bozma değişmedi.
+BERT_AYIRMA_FARK = 0.2
 BERT_MODELI = 'dbmdz/bert-base-turkish-cased'   # uncased sürümü Türkçe karakterleri siliyor (çok -> cok): işe yaramaz
 
 
@@ -769,6 +788,7 @@ class YazimDuzeltici:
         for f in (re.sub(r'([ıiuü])o', r'\1yo', w),            # istiodum -> istiyodum
                   re.sub(r'([ıiuü])yc([ae])', r'\1c\2', w),    # yapiycaz -> yapicaz (-> yapacağız)
                   wa,                                            # benım -> benim (yanlış yerde ı)
+                  *_gelecek_zaman(w),                            # beklicez -> bekleyecez, yagicak -> yağacak
                   *_uzatmasiz(w, cift_harf)):                    # tatlımmm -> tatlım, yaaa -> ya
             if f not in bicimler:
                 bicimler.append(f)
@@ -801,6 +821,17 @@ class YazimDuzeltici:
                     hedef.append(y)
         aksan = [y for y in aksan if y not in konusma]
         return konusma, aksan
+
+    def _deasciify(self, w):
+        v = self._aksanli.get(('da', w))
+        if v is None:
+            try:
+                from zemberek.normalization.deasciifier.deasciifier import Deasciifier
+                v = tr_lower(Deasciifier(w).convert_to_turkish())
+            except Exception:
+                v = w
+            self._aksanli[('da', w)] = v
+        return v
 
     # ---- aday üretimi ----
     def tanidik(self, c):
@@ -875,6 +906,11 @@ class YazimDuzeltici:
                     C[(w,)] = (max(C[(w,)][0], C_BILINEN_YANLIS), 'aynı')
         if w in KONUSMA_GECERLI:
             ekle(KONUSMA_GECERLI[w], C_KONUSMA, 'konuşma dili')
+        if w.startswith('nap') and len(w) > 4 and not gecerli:       # naptık -> ne yaptık, napalım -> ne yapalım
+            for c in ['yap' + w[3:]] + self.konusma_dili('yap' + w[3:])[0]:
+                if self.duzgun(c):
+                    ekle(('ne', c), C_SOZLUK, 'sözlük')
+                    break
         if olagan:
             if genis:
                 for c in self.aksan_secenekleri(w):
@@ -896,6 +932,9 @@ class YazimDuzeltici:
         for c in aksan:
             # kısa kelimede (du -> dü) ancak aday belirgin biçimde daha sıksa
             if self.tanidik(c) and (not kisa or self.lm.tekli(c) >= self.lm.tekli(w) + 2.0):
+                ekle(c, min(duzenleme_maliyeti(w, c), C_AKSAN_TAVAN), 'aksan')
+            elif genis and not kisa and "'" not in c and self.duzgun(c):
+                # dağarcıkta olmayan ama çözümlenen çekimli biçim (seytandandir -> şeytandandır); kararı sıralayıcı verir
                 ekle(c, min(duzenleme_maliyeti(w, c), C_AKSAN_TAVAN), 'aksan')
         if genis:
             for c in list(C):
@@ -927,6 +966,11 @@ class YazimDuzeltici:
                 # Bunun dışındaki her durumda kelime yabancıdır (what, show, follow) ve korunur.
                 ham = [c for c in ham if len(c) == len(w) and all(
                     x == y or (x in YABANCI_HARF and frozenset((x, y)) in _KLAVYE) for x, y in zip(w, c))]
+            if genis:
+                # Türkçe karakteri eksik VE bir harfi yanlış (heycanlaniyor -> heyecanlanıyor): önce karakterleri geri koy
+                da = self._deasciify(w)
+                if da != w and not self.gecerli(da):
+                    ham += [c for c in self.oneriler(da) if c not in ham and "'" not in c]
             secilen = [c for c in ham if self.tanidik(c)]
             if not secilen and len(w) >= TEK_ADAY_UZUNLUK:
                 duzgunler = [c for c in ham if "'" not in c and self.duzgun(c)]
@@ -939,8 +983,9 @@ class YazimDuzeltici:
         if m and len(m.group(1)) >= 3:
             if self.duzgun(m.group(1)):                      # atarmısınız -> atar mısınız
                 ekle((m.group(1), _uyumlu_soru_eki(m.group(1), m.group(2))), C_AYIR, 'ayırma')
-            else:                                            # gelcekmisin -> gelecek misin
-                for c in self.konusma_dili(m.group(1))[0]:
+            else:                                            # gelcekmisin -> gelecek misin, dogrumuyum -> doğru muyum
+                konusma, aksan = self.konusma_dili(m.group(1))
+                for c in konusma + aksan:
                     ekle((c, _uyumlu_soru_eki(c, m.group(2))), C_AYIR + C_KONUSMA, 'ayırma')
         n = len(w)
         for k in range(1, n):                                # eksik boşluk: vebeni -> ve beni
@@ -1200,7 +1245,9 @@ class YazimDuzeltici:
                 p = self.taban.olasilik([v for _, v in satirlar])
                 ayni = (kelimeler[i],)
                 p_en = max((pi for (c, _), pi in zip(satirlar, p) if c != ayni), default=0.0)
-                if BELIRSIZ_ALT <= p_en <= BELIRSIZ_UST:
+                # de/da ayırma adayı (bende -> ben de) taban sıralayıcıya hep düşük görünür; karar bağlamın, BERT'e sor
+                ayirma = any(v[_KAYNAKLAR.index('ayırma')] for _, v in satirlar)
+                if BELIRSIZ_ALT <= p_en <= BELIRSIZ_UST or ayirma:
                     belirsiz.append((i, satirlar))
                 else:
                     olas[i] = p
@@ -1211,7 +1258,9 @@ class YazimDuzeltici:
             ayni = (kelimeler[i],)
             p_ayni = max((pi for (c, _), pi in zip(satirlar, p) if c == ayni), default=0.0)
             en_iyi, p_en = max(((c, pi) for (c, _), pi in zip(satirlar, p) if c != ayni), key=lambda x: x[1])
-            if p_en >= esik and p_en > p_ayni:
+            # BERT kipinde de/da ayırma (bende -> ben de) bağlama bakılarak verilmiş bir karar: kendi eşiği var
+            esik_i = esik - BERT_AYIRMA_FARK if self.taban is not None and len(en_iyi) == 2                 and en_iyi[1] in ('de', 'da', 'ki') else esik
+            if p_en >= esik_i and p_en > p_ayni:
                 sonuc[i] = (en_iyi, self.adaylar(kelimeler[i], genis=True)[en_iyi][1])
             else:
                 sonuc[i] = (ayni, 'aynı')
