@@ -387,6 +387,9 @@ KISA_SINIR = 3          # bu uzunluğa kadarki bilinmeyen kelimeye düzenleme me
 YABANCI_HARF = frozenset('qwx')   # Türk alfabesinde olmayan harf: kelime büyük olasılıkla yabancı
 OZEL_ADAY_ESIK = -12.5  # yalnızca özel isim olarak çözümlenen adayı kabul için en düşük log-sıklık
 TEK_ADAY_UZUNLUK = 7    # dağarcıkta olmayan (nadir çekimli) adaya ancak kelime uzunsa ve aday tekse güven
+GUVEN_KISA = 0.85       # 4-5 harfli kelimede 'yazım' düzeltmesini kabul için gereken sonsal olasılık
+GUVEN_UZUN = 0.55       # 6+ harfli kelimede
+KEYFI_DEGISIKLIK = 2.6  # bu maliyetten itibaren değişiklik yazım hatasına benzemez; bağlam kanıtı istenir
 C_ILK_HARF = 1.0        # ilk harfi değiştiren düzeltmeye ek ceza: insanlar ilk harfi nadiren yanlış yazar (cringe -> "ringe" olmasın)
 C_BIRLESTIR = 1.5       # bölünmüş kelimeyi birleştirmek; parçalardan biri tek başına kelime değilken (orma na)
 # İki parça da geçerli kelimeyken (kaybet tik) birleştirmek için dil modelinin en az bu kadar (nat) kazanması gerekir.
@@ -754,7 +757,46 @@ class YazimDuzeltici:
                 sonuc[pi] = ((), kaynak)
                 sonuc[pi + 1] = (c, kaynak)
             i, durum = pi, onceki
+        self._guven_denetimi(kelimeler, sonuc, tek)
         return self._gercek_kelime(sonuc)
+
+    def _guven_denetimi(self, kelimeler, sonuc, tek):
+        """Düzenleme mesafesiyle bulunan ('yazım') düzeltmeleri süz. Kelime şu durumlarda tahmine
+        kurban edilmez, yerine en iyi GÜVENİLİR seçenek (tablo/konuşma dili/aksan ya da kelimenin kendisi) gelir:
+          - seçilen aday, o konumdaki diğer seçeneklere göre açık ara önde değilse (belirsizlik),
+          - değişiklik yazım hatasına benzemiyorsa (komşu tuş / ses benzerliği / yer değiştirme değil,
+            keyfi bir harf) ve aday bu bağlamda derlemde hiç görülmemişse,
+          - hemen yanında yabancı bir kelime varsa (ow şitmen: büyük olasılıkla o da yabancı)."""
+        lm = self.lm
+        n = len(sonuc)
+        for i, (c, kaynak) in enumerate(sonuc):
+            if kaynak != 'yazım':
+                continue
+            on, art = '<s>', '</s>'
+            for k in range(i - 1, -1, -1):
+                if sonuc[k][0]:
+                    on = sonuc[k][0][-1]
+                    break
+            for k in range(i + 1, n):
+                if sonuc[k][0]:
+                    art = sonuc[k][0][0]
+                    break
+            skor = {}
+            for a, (maliyet, _) in tek[i].items():
+                skor[a] = (lm.lp(on, a[0]) + sum(lm.lp(a[k - 1], a[k]) for k in range(1, len(a)))
+                           + lm.lp(a[-1], art) - maliyet)
+            tepe = max(skor.values())
+            p = math.exp(skor[c] - tepe) / sum(math.exp(v - tepe) for v in skor.values())
+            w = kelimeler[i]
+            guvenli = p >= (GUVEN_KISA if len(w) <= 5 else GUVEN_UZUN)
+            if guvenli and tek[i][c][0] >= KEYFI_DEGISIKLIK and not (lm.var(on, c[0]) or lm.var(c[-1], art)):
+                guvenli = False
+            if guvenli and ((i > 0 and YABANCI_HARF & set(kelimeler[i - 1]))
+                            or (i + 1 < n and YABANCI_HARF & set(kelimeler[i + 1]))):
+                guvenli = False
+            if not guvenli:
+                yedek = max((a for a in tek[i] if tek[i][a][1] != 'yazım'), key=lambda a: skor[a])
+                sonuc[i] = (yedek, tek[i][yedek][1])
 
     def gercek_kelime_adayi(self, on, w, art):
         """Geçerli w kelimesi için bağlama daha iyi oturan komşu biçim: (kazanç, aday, kanıt) ya da None.
