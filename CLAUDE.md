@@ -84,6 +84,7 @@ Tuzaklar:
 - **GPU'yu gizlemek:** Windows'ta `CUDA_VISIBLE_DEVICES=` (boş) işe yaramıyor, `CUDA_VISIBLE_DEVICES=-1` kullan. İşlemci hızını ölçerken buna dikkat et.
 - **BERT tablo üretimi:** 4 süreç + `OMP_NUM_THREADS=4` sorunsuz (~5 dk). 8 süreç 24 GB ekran belleğini taşırdı ve süreçler saatlerce süründü. Tablo üretimiyle noktalama eğitimini aynı anda çalıştırma.
 - **BERT öznitelikleri:** `BertPuan.PENCERE` (adayın iki yanındaki alt parça sayısı) eğitimde ve çalışma anında aynı olmalı (şimdi 40). Değişirse tabloyu yeniden üret. BERT'li tablonun ilk 50 sütunu BERT'siz tablodur: `egit_siralayici.py --tablo ...` (`--bert` olmadan) aynı veriden taban modeli eğitir.
+- **Kısa yabancı kelimeler:** 3 harf ve altı, ünlü içeren bilinmeyen kelimeye Zemberek tablosundan aday alınmaz (`bro` -> "bir" oluyordu); `hiç + bir*` birleşmesi için ikinci kelime girdide `bi` ile başlamalı. Yabancı harfli (q/w/x) kelimede Deasciifier + öneri bloğu çalışmaz.
 - **Kural son geçişi** (`_kural_son_gecis`) yalnızca zaten değiştirilmiş kelimelere uygulanır; sıralayıcıdan sonra çalıştığı için tabloları bayatlatmaz. Temiz metni korumak için bu koşulu gevşetme (yazarın kendi "hiç bir"i korunur).
 
 Sıralayıcıyı yeniden eğitmek (depodaki model bu komutlarla üretildi; tablo dosyaları büyük, `olcum/veri/` altında tut):
@@ -113,10 +114,10 @@ Gerçek tweetler, test bölümü (1.000 tweet, 2.226 hata):
 | tr-duzelt, devir anı (`4170084`) | %73,7 | %4,1 | %0,42 | 88,6 |
 | **tr-duzelt, varsayılan (eşik 0,8)** | **%73,6** | **%2,6** | **%0,20** | **90,5** |
 | **tr-duzelt `--bert`** | **%76,1** | **%2,2** | **%0,27** | **91,5** |
-| `--temkinli` (0,9) | %69,5 | %2,2 | %0,17 | 89,5 |
-| `--bert --temkinli` | %72,7 | %1,7 | %0,22 | 90,9 |
+| `--temkinli` (0,95) | %63,3 | %1,7 | %0,13 | 87,6 |
+| `--bert --temkinli` (0,95) | %67,6 | %1,6 | %0,17 | 89,2 |
 
-Geliştirme: varsayılan %74,6 / %2,5 / %0,24; `--bert` %75,1 / %2,8 / %0,28. Yapay setler (varsayılan / `--bert`): tek hata %80,2 / %85,8 düzeltilen; üç hata %83,0 / %87,3; yoğun %82,9 / %86,1; temiz metinde bozma %0,12 / %0,12; İngilizcede %0,11 / %0,18.
+Geliştirme: varsayılan %74,5 / %2,5 / %0,24; `--bert` %74,9 / %2,7 / %0,28; `--temkinli` 0,95'te %64,0 / %1,9 / %0,19 (0,9'da %70,0 / %2,0 / %0,23; 0,95 seçildi çünkü önceki temkinli kipin bozulanını aşmıyor). Yapay setler (varsayılan / `--bert`): tek hata %80,2 / %84,9 düzeltilen; üç hata %82,2 / %86,0; yoğun %82,3 / %85,4; temiz metinde bozma %0,12 / %0,12; İngilizcede %0,11 / %0,12.
 
 Noktalama, IMST test F1 (`olcum/noktalama_olc.py`): CRF nokta 0,675 / virgül 0,079 / soru 0,341; `noktalama_bert` (virgül ≥0,7, soru ≥0,6) 0,782 / 0,433 / 0,463, virgül isabeti 0,747.
 

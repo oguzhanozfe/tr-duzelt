@@ -944,7 +944,8 @@ class YazimDuzeltici:
                     govde = c[0][:-2]
                     if c[0].endswith(ek) and len(govde) >= 2 and self.duzgun(govde) and self.lm.idx(govde) > 0:
                         ekle((govde, ayri), C[c][0] + C_AYIR_EK, 'ayırma')
-        if genis:
+        # kısa ve ünlülü bilinmeyen kelime çoğu zaman yabancıdır (bro, the): tablo tahmini yok; snn, msj gibi ünsüz kısaltmalar kalır
+        if genis and not (kisa and any(h in _UNLU for h in w)):
             for t in self.tablo.get(w, ()):
                 # tablodaki karşılık da konuşma dili olabilir (cekiyodu -> çekiyodu): yazı diline çevir
                 for c in ([t] if self.duzgun(t) else self.konusma_dili(t)[0]):
@@ -966,7 +967,7 @@ class YazimDuzeltici:
                 # Bunun dışındaki her durumda kelime yabancıdır (what, show, follow) ve korunur.
                 ham = [c for c in ham if len(c) == len(w) and all(
                     x == y or (x in YABANCI_HARF and frozenset((x, y)) in _KLAVYE) for x, y in zip(w, c))]
-            if genis:
+            if genis and not YABANCI_HARF & set(w):
                 # Türkçe karakteri eksik VE bir harfi yanlış (heycanlaniyor -> heyecanlanıyor): önce karakterleri geri koy
                 da = self._deasciify(w)
                 if da != w and not self.gecerli(da):
@@ -1125,7 +1126,7 @@ class YazimDuzeltici:
             a, b = sonuc[i][0], sonuc[i + 1][0]
             if len(a) != 1 or len(b) != 1 or (birlesebilir is not None and not birlesebilir[i]):
                 continue
-            if ((a[0] == 'hiç' and b[0].startswith('bir')) or (a[0] == 'her' and b[0].startswith('hangi'))
+            if ((a[0] == 'hiç' and b[0].startswith('bir') and kelimeler[i + 1].startswith('bi')) or (a[0] == 'her' and b[0].startswith('hangi'))
                     or (a[0], b[0]) == ('bir', 'kaç')):
                 j = a[0] + b[0]
                 # yalnızca biri zaten düzeltildiyse (hic bi -> hiçbir); yazarın kendi yazdığı "hiç bir" korunur
@@ -1245,9 +1246,7 @@ class YazimDuzeltici:
                 p = self.taban.olasilik([v for _, v in satirlar])
                 ayni = (kelimeler[i],)
                 p_en = max((pi for (c, _), pi in zip(satirlar, p) if c != ayni), default=0.0)
-                # de/da ayırma adayı (bende -> ben de) taban sıralayıcıya hep düşük görünür; karar bağlamın, BERT'e sor
-                ayirma = any(v[_KAYNAKLAR.index('ayırma')] for _, v in satirlar)
-                if BELIRSIZ_ALT <= p_en <= BELIRSIZ_UST or ayirma:
+                if BELIRSIZ_ALT <= p_en <= BELIRSIZ_UST:
                     belirsiz.append((i, satirlar))
                 else:
                     olas[i] = p
@@ -1935,14 +1934,14 @@ def main():
     ap.add_argument('--esik', type=float,
                     help='sıralayıcının eşiği (0-1): yükseldikçe daha az ama daha emin düzeltir (TR_DUZELT_ESIK ile aynı)')
     ap.add_argument('--temkinli', action='store_true',
-                    help='yalnızca çok emin olduğunu düzelt (eşik 0,9): yanlış düzeltme ~%%2, düzeltilen biraz azalır')
+                    help='yalnızca çok emin olduğunu düzelt (eşik 0,95): yanlış düzeltme %%2 altı, düzeltilen azalır')
     ap.add_argument('--bert', action='store_true',
                     help="kelime seçiminde BERTurk'ün cümle bağlamına da bak (aynı yanlış oranında daha çok düzeltir; torch ister)")
     ap.add_argument('--paragraf', action='store_true',
                     help='deneysel paragraf bölmeyi aç (ölçümde rastgeleden iyi çıkmadı)')
     args = ap.parse_args()
     if args.esik is not None or args.temkinli:       # ortam değişkeni toplu kipteki süreçlere de geçer
-        os.environ['TR_DUZELT_ESIK'] = str(args.esik if args.esik is not None else 0.9)
+        os.environ['TR_DUZELT_ESIK'] = str(args.esik if args.esik is not None else 0.95)
     # Çıktı dosyaya/boruya yönlendirilmişse Windows varsayılan olarak ANSI yazar; UTF-8'e sabitle.
     for akis in (sys.stdout, sys.stderr):
         if hasattr(akis, 'reconfigure') and not akis.isatty():

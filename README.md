@@ -61,7 +61,7 @@ GİRDİ
   mayista          -> mayıs'ta           [yazım]  adaylar: mayısta (aksan), mayıs'ta (yazım), mayıs da (ayırma)
   bulustuk         -> buluştuk           [aksan]  adaylar: buluştuk (aksan)
   tatlımmm         -> tatlım             [konuşma dili]  adaylar: tatlım (konuşma dili)
-  cok              -> çok                [aksan]  adaylar: çok (aksan), çök (tablo)
+  cok              -> çok                [aksan]  adaylar: çok (aksan)
   guzeldi          -> güzeldi            [aksan]  adaylar: güzeldi (aksan)
   tmm              -> tamam              [sözlük]  adaylar: tamam (sözlük), taam (tablo), tam (tablo)
 
@@ -93,7 +93,7 @@ Bu durak iki işe ayrılır: önce "bu kelime aslında ne olabilir?" diye **aday
 | **aksan** | Eksik Türkçe karakterleri (ç ğ ı ö ş ü) dener. | `bugun → bugün`, `benım → benim` |
 | **konuşma dili** | Konuşur gibi yazılanı yazı diline çevirir, uzatılmış harfleri kısaltır. | `gelcektim → gelecektim`, `tatlımmm → tatlım` |
 | **yazım** | Bir harf eksik, fazla ya da yanlış yazılmış kelimeler için en yakın geçerli kelimeler. | `bilemiyrum → bilemiyorum` |
-| **tablo** | Zemberek'in milyonlarca cümleden kendiliğinden çıkardığı 470 bin satırlık liste. Çok şey bilir ama sık yanılır. | `msj → mesaj` (ama `tmm → tam` da der) |
+| **tablo** | Zemberek'in milyonlarca cümleden kendiliğinden çıkardığı 470 bin satırlık liste. Çok şey bilir ama sık yanılır. Kısa ve ünlülü kelimelerde (`bro`, `the`) kullanılmaz: onlar çoğu zaman yabancıdır. | `msj → mesaj` (ama `tmm → tam` da der) |
 | **ayırma** | Bitişik yazılmış iki kelimeyi ayırır. | `vebeni → ve beni`, `bende → ben de` |
 | **birleştirme** | Yanlışlıkla bölünmüş kelimeyi birleştirir. | `orma na → ormana` |
 
@@ -181,7 +181,7 @@ Her seçim ölçülerek yapıldı. Ölçüm verisi: gerçek insanların yazdığ
 | tr-duzelt, elle ayarlı kurallar (sıralayıcısız) | %67,3 | %5,9 | %0,45 |
 | tr-duzelt, öğrenilmiş sıralayıcı (25 Kasım) | %73,7 | %4,1 | %0,42 |
 | **tr-duzelt, şimdiki: + kural son geçişi, yeni adaylar, eşik 0,8** | **%73,6** | **%2,6** | **%0,20** |
-| **tr-duzelt `--bert`: belirsiz kelimede BERTurk'e de sorar** | **%75,8** | **%2,2** | **%0,25** |
+| **tr-duzelt `--bert`: belirsiz kelimede BERTurk'e de sorar** | **%76,1** | **%2,2** | **%0,27** |
 
 Tek tek gerekçeler:
 
@@ -213,9 +213,9 @@ Yukarıdaki tablo gerçek veriydi. Bir de temiz cümleleri **bilerek bozup** ger
 | Test (düzeltilen / yanlış düzeltilen) | İlk sürüm | Zemberek normalleştirici | tr-duzelt (şimdiki) |
 |---|---|---|---|
 | Cümlede tek yazım hatası | %90 / %10 | %75 / %23 | **%80 / %2** |
-| Cümlede üç yazım hatası | %91 / %8 | %74 / %23 | **%83 / %2** |
+| Cümlede üç yazım hatası | %91 / %8 | %74 / %23 | **%82 / %2** |
 | Ortasından bölünmüş kelime (`orma na`) | %0 / hepsi | %70 / %28 | **%88 / %2** |
-| Yoğun gürültü: hepsi bir arada + araya İngilizce | %74 / %21 | %71 / %23 | **%83 / %2** |
+| Yoğun gürültü: hepsi bir arada + araya İngilizce | %74 / %21 | %71 / %23 | **%82 / %2** |
 | Araya giren İngilizce: bozulan kelime | %1,50 | %3,08 | **%0,11** |
 | Temiz metin: bozulan kelime | %0,32 | %1,32 | **%0,12** |
 
@@ -265,11 +265,11 @@ Sonuç (gerçek tweetler, test):
 | | Düzeltilen | Yanlış düzeltilen | Bozulan |
 |---|---|---|---|
 | Varsayılan | %73,6 | %2,6 | %0,20 |
-| `--bert` | %75,8 | %2,2 | %0,25 |
-| `--temkinli` (eşik 0,9) | %69,5 | %2,2 | %0,17 |
-| `--bert --temkinli` | %72,1 | **%1,6** | %0,20 |
+| `--bert` | %76,1 | %2,2 | %0,27 |
+| `--temkinli` (eşik 0,95) | %63,3 | %1,7 | %0,13 |
+| `--bert --temkinli` | %67,6 | %1,6 | %0,17 |
 
-Test tweetlerinde `--bert` daha çok ve daha az yanlış düzeltiyor; bozulan doğru kelime biraz daha yüksek (%0,25'e karşı %0,20). Geliştirme tweetlerinde iki kip neredeyse aynı (%74,7 / %2,8 / %0,24 ile %74,6 / %2,5 / %0,24). Yani kelime seçimindeki fark ölçüm gürültüsünü pek aşmıyor. Yapay testlerde fark daha açık: cümlede tek yazım hatası %80'den %86'ya, üç yazım hatası %83'ten %87'ye. `--bert`'in asıl kazancı noktalamada.
+Test tweetlerinde `--bert` daha çok ve daha az yanlış düzeltiyor; bozulan doğru kelime biraz daha yüksek (%0,27'ye karşı %0,20). Geliştirme tweetlerinde iki kip yakın (%74,9 / %2,7 / %0,28 ile %74,5 / %2,5 / %0,24). Yani kelime seçimindeki fark ölçüm gürültüsünü pek aşmıyor; en görünür kazancı `bende` → `ben de` gibi bağlam isteyen kararlar. Yapay testlerde fark daha açık: cümlede tek yazım hatası %80'den %85'e, üç yazım hatası %82'den %86'ya. `--bert`'in asıl kazancı noktalamada.
 
 **Ekran kartı gerekmez.** İşlemcide kelime seçimindeki BERTurk otomatik olarak 8 bitlik tam sayı hesabına geçer: 1,7 kat hızlı, sonuç aynı (geliştirme tweetlerinde %74,8 / %2,9 / %0,28). Tek çekirdekte kelime seçimi saniyede ~65 kelime (aynı ölçümde BERT'siz ~440), noktalama ~300 kelime. Ekran kartı varsa kendiliğinden kullanılır.
 
@@ -376,7 +376,7 @@ python tr_duzelt.py "herkez geldimi bilmiyorum"
 python tr_duzelt.py --yolculuk "..."                       # adım adım: hangi kelimeye neden dokunuldu
 python tr_duzelt.py --dosya girdi.txt --ayrinti            # yapılan kelime düzeltmelerini de listeler
 python tr_duzelt.py --dosya girdi.txt --cikti cikti.txt    # sonucu UTF-8 dosyaya yazar
-python tr_duzelt.py --temkinli "..."                        # yalnızca çok emin olduğunu düzeltir (yanlış ~%2)
+python tr_duzelt.py --temkinli "..."                        # yalnızca çok emin olduğunu düzeltir (yanlış %2'nin altında)
 python tr_duzelt.py --bert "..."                            # cümlenin tamamına bakar (bkz. BERT kipi)
 ```
 
@@ -418,7 +418,7 @@ Kendi yazdığımız 20 düzeltilmemiş metin ve iki kipin çıktısı `ornekler
 | Eşik | Düzeltilen | Yanlış düzeltilen | Bozulan |
 |---|---|---|---|
 | 0,8 (varsayılan) | %73,6 | %2,6 | %0,20 |
-| 0,9 (`--temkinli`) | %69,5 | %2,2 | %0,17 |
+| 0,95 (`--temkinli`) | %63,3 | %1,7 | %0,13 |
 
 ```powershell
 $env:TR_DUZELT_ESIK = "0.9"      # PowerShell;  Linux/macOS: TR_DUZELT_ESIK=0.9 python tr_duzelt.py ...
