@@ -349,7 +349,9 @@ def main():
     tr.train(args.cikti)
 
     tagger = pycrfsuite.Tagger()
-    tagger.open(args.cikti)
+    with open(args.cikti, 'rb') as f:
+        model_baytlari = f.read()            # tr_duzelt.py'deki gibi bellekten aç (yol kodlamasından bağımsız)
+    tagger.open_inmemory(model_baytlari)
     rapor = {'egitim_kelime': n_tok}
     rapor['gazete_crf'] = evaluate(tagger, test, 'CRF — ayrılmış gazete belgeleri', lm)
     if kitap:

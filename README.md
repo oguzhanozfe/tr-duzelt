@@ -21,11 +21,55 @@ Son satır bilerek burada: `bende` → `ben de` düzeltilmedi ve "beğendim"den 
 
 ## Kurulum
 
-Python 3.11 ile denendi (3.9–3.12'de de çalışması beklenir). `zemberek-python`, Python 3.13 ve NumPy 2 ile çalışmıyor.
+Python 3.11 ve 3.12 ile denendi. `zemberek-python`, Python 3.13+ ve NumPy 2 ile çalışmıyor.
 
 ```bash
 pip install -r requirements.txt
 ```
+
+### Windows (yönetici hakkı olmadan)
+
+Bu yol hiçbir adımda yönetici onayı istemez: her şey kullanıcı klasörünüze kurulur, sistemdeki başka bir Python'a dokunulmaz ve C derleyicisi gerekmez.
+
+> 3. ve 4. adımlar aynı uv komutlarıyla Linux'ta doğrulandı; gerçek bir Windows makinede henüz denenmedi. Takıldığınız yer olursa issue açın.
+
+**1. Depoyu indirin.** [ZIP olarak indirip](https://github.com/oguzhanozfe/tr-duzelt/archive/refs/heads/main.zip) bir klasöre açın. Git gerekmez.
+
+**2. uv'yi kurun.** [uv](https://docs.astral.sh/uv/), doğru Python sürümünü kendisi indirip yöneten bir araçtır. Başlat menüsünden PowerShell'i normal şekilde açın ("Yönetici olarak çalıştır" değil) ve şunu çalıştırın:
+
+```powershell
+powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"
+```
+
+Bitince pencereyi kapatıp yeni bir PowerShell açın; `uv --version` sürüm yazmalı.
+
+**3. Ortamı kurun.** Zip'i açtığınız, içinde `tr_duzelt.py` bulunan klasöre girin:
+
+```powershell
+cd $HOME\Downloads\tr-duzelt-main      # klasör sizde farklıysa onu yazın
+uv venv --python 3.11
+uv pip install -r requirements.txt
+```
+
+`uv venv`, bilgisayarda Python 3.11 yoksa onu kendisi indirir. İkinci komut yaklaşık 115 MB indirir (çoğu Zemberek'in dil modeli).
+
+**4. Çalıştırın.**
+
+```powershell
+.venv\Scripts\python tr_duzelt.py "herkez geldimi bilmiyorum"
+.venv\Scripts\python tr_duzelt.py --dosya girdi.txt --cikti cikti.txt
+```
+
+Ortamı etkinleştirmeniz (`activate`) gerekmez; `.venv\Scripts\python` doğrudan çalışır, böylece PowerShell'in betik çalıştırma kısıtına takılmazsınız. Uzun metinlerde `--dosya` / `--cikti` kullanın: çıktı UTF-8 yazılır, girdi UTF-8, UTF-16 ya da ANSI olabilir.
+
+**Takılırsanız**
+
+| Belirti | Çözüm |
+|---|---|
+| 2. adımdaki betik engelleniyor ya da `uv` bulunamıyor | [uv-x86_64-pc-windows-msvc.zip](https://github.com/astral-sh/uv/releases/latest/download/uv-x86_64-pc-windows-msvc.zip) dosyasını indirin, içindeki `uv.exe`'yi proje klasörüne koyun ve komutlarda `uv` yerine `.\uv.exe` yazın. Kurulum gerektirmez. |
+| İndirmeler sertifika (SSL) hatası veriyor; kurumsal ağlarda olur | uv komutlarına `--system-certs` ekleyin, ör. `uv pip install --system-certs -r requirements.txt` (eski uv sürümlerinde `--native-tls`). |
+| `ImportError: DLL load failed while importing _pycrfsuite` | Bilgisayarda Visual C++ çalışma zamanı (`MSVCP140.dll`) yok. Yönetici gerektirmeyen çözüm: `uv pip install msvc-runtime`; betik bu DLL'leri ortamın içinde arar. Yine de yüklenmezse `.venv\Scripts\msvcp140.dll` dosyasını `.venv\Lib\site-packages\pycrfsuite\` klasörüne kopyalayın. |
+| uv kullanamıyorsanız | [Python 3.11.9](https://www.python.org/downloads/release/python-3119/) sayfasından "Windows installer (64-bit)" indirin (3.11'in kurucusu olan son sürümü budur). İlk ekranın altındaki **"Use admin privileges when installing py.exe"** kutusunun işaretini kaldırıp *Install Now* deyin. Sonra proje klasöründe: `& "$env:LOCALAPPDATA\Programs\Python\Python311\python.exe" -m venv .venv` ve `.venv\Scripts\python -m pip install -r requirements.txt`. |
 
 ## Kullanım
 
@@ -33,7 +77,8 @@ pip install -r requirements.txt
 python tr_duzelt.py "herkez geldimi bilmiyorum"
 # Herkes geldi mi bilmiyorum.
 
-python tr_duzelt.py --dosya girdi.txt --ayrinti    # yapılan kelime düzeltmelerini de listeler
+python tr_duzelt.py --dosya girdi.txt --ayrinti            # yapılan kelime düzeltmelerini de listeler
+python tr_duzelt.py --dosya girdi.txt --cikti cikti.txt    # sonucu UTF-8 dosyaya yazar
 ```
 
 ```python
@@ -98,6 +143,8 @@ python egit_noktalama.py --trmor2018 trmor2018.train --ud *.conllu \
 ```
 
 Kendi alanınızdan düzgün yazılmış metinle eğitmek hem başarımı artırır hem lisans sorusunu sadeleştirir. Ayrıntılar `egit_noktalama.py` başlığında.
+
+Windows'ta eğitirken `--cikti` yolunda Türkçe karakter olmasın: CRFsuite model dosyasını C kütüphanesiyle yazar ve bu tür yolları açamaz. (`tr_duzelt.py` modeli Python üzerinden okuduğu için bundan etkilenmez.)
 
 ## Veri, araçlar ve atıflar
 

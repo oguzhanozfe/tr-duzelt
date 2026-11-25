@@ -21,12 +21,13 @@ Katmanlar (her biri ayrı, klasik bir teknik):
   nokta     : F1 0,81 (gazete) / 0,76 (roman) / 0,66 (öğrenci yazısı)      virgül: F1 0,2-0,3 (zayıf)
   yapamadığı: yazımı doğru ama anlamca yanlış kelimeler (orda/orta, telefonumda/telefonum da), paragraf
 
-Kurulum (Python 3.11 ile denendi; zemberek-python NumPy 2 ve Python 3.13 ile çalışmıyor):
-  pip install -r requirements.txt
+Kurulum (Python 3.11 ve 3.12 ile denendi; zemberek-python NumPy 2 ve Python 3.13+ ile çalışmıyor):
+  pip install -r requirements.txt          # Windows'ta yönetici hakkı olmadan kurulum: README.md
 
 Kullanım:
   python tr_duzelt.py "düzeltilecek metin"                  # noktalama.crfsuite aynı klasörde olmalı
   python tr_duzelt.py --dosya girdi.txt --ayrinti           # yapılan kelime düzeltmelerini de göster
+  python tr_duzelt.py --dosya girdi.txt --cikti cikti.txt   # sonucu UTF-8 dosyaya yaz
 
   from tr_duzelt import Duzeltici
   d = Duzeltici('noktalama.crfsuite')       # yükleme ~15 sn (dil modeli + morfoloji)
@@ -679,12 +680,32 @@ AYLAR = ('ocak', 'şubat', 'mart', 'nisan', 'mayıs', 'haziran', 'temmuz', 'ağu
 _AY_RE = re.compile(r"^(%s)(?:'?([a-zçğıöşü]+))?$" % '|'.join(AYLAR))
 
 
+def _windows_dll_dizinleri():
+    """Windows'ta python-crfsuite, Visual C++ çalışma zamanına (MSVCP140.dll) ihtiyaç duyar. Sistemde
+    kurulu değilse `pip install msvc-runtime` onu ortamın köküne ve Scripts klasörüne koyar; o
+    klasörleri DLL arama yoluna ekliyoruz ki yönetici hakkı isteyen kurulum şart olmasın."""
+    if os.name != 'nt' or not hasattr(os, 'add_dll_directory'):
+        return
+    for d in (sys.prefix, os.path.join(sys.prefix, 'Scripts')):
+        try:
+            if os.path.isfile(os.path.join(d, 'msvcp140.dll')):
+                os.add_dll_directory(d)
+        except OSError:
+            pass
+
+
 class Noktalayici:
     def __init__(self, model_yolu, lm, morph):
+        _windows_dll_dizinleri()
         import pycrfsuite
         from zemberek.core.turkish import SecondaryPos, RootAttribute
         self.tagger = pycrfsuite.Tagger()
-        self.tagger.open(model_yolu)
+        # Modeli Python okuyup bellekten veriyoruz: CRFsuite dosya yolunu C'nin fopen'ıyla açtığı için
+        # Windows'ta Türkçe karakterli klasörlerde (C:\Users\Oğuzhan\...) Tagger.open(yol) başarısız
+        # olur. CRFsuite bu belleği kopyalamaz; nesne yaşadıkça baytları da elde tutmak gerekir.
+        with open(model_yolu, 'rb') as f:
+            self._model_baytlari = f.read()
+        self.tagger.open_inmemory(self._model_baytlari)
         self.lm = lm
         self.morph = morph
         self.SecondaryPos = SecondaryPos
@@ -999,19 +1020,41 @@ class Duzeltici:
         return sonuc
 
 
+def dosya_oku(yol):
+    """UTF-8 (BOM'lu/BOM'suz), UTF-16 (Windows PowerShell'in `>` ile ürettiği) ve ANSI (cp1254) okur."""
+    with open(yol, 'rb') as f:
+        ham = f.read()
+    if ham[:2] in (b'\xff\xfe', b'\xfe\xff'):
+        return ham.decode('utf-16')
+    try:
+        return ham.decode('utf-8-sig')
+    except UnicodeDecodeError:
+        return ham.decode('cp1254', errors='replace')
+
+
 def main():
     ap = argparse.ArgumentParser(description='LLM kullanmadan Türkçe metin düzeltme')
     ap.add_argument('metin', nargs='?')
-    ap.add_argument('--dosya')
+    ap.add_argument('--dosya', help='düzeltilecek metin dosyası (UTF-8, UTF-16 ya da ANSI)')
+    ap.add_argument('--cikti', help='sonucu ekrana değil bu dosyaya yaz (UTF-8)')
     ap.add_argument('--model', default=os.path.join(os.path.dirname(os.path.abspath(__file__)), 'noktalama.crfsuite'))
     ap.add_argument('--ayrinti', action='store_true', help='yapılan kelime düzeltmelerini de göster')
     ap.add_argument('--paragraf', action='store_true',
                     help='deneysel paragraf bölmeyi aç (ölçümde rastgeleden iyi çıkmadı)')
     args = ap.parse_args()
-    metin = open(args.dosya, encoding='utf-8').read() if args.dosya else (args.metin or sys.stdin.read())
+    # Çıktı dosyaya/boruya yönlendirilmişse Windows varsayılan olarak ANSI yazar; UTF-8'e sabitle.
+    for akis in (sys.stdout, sys.stderr):
+        if hasattr(akis, 'reconfigure') and not akis.isatty():
+            akis.reconfigure(encoding='utf-8')
+    metin = dosya_oku(args.dosya) if args.dosya else (args.metin or sys.stdin.read())
     d = Duzeltici(args.model)
     sonuc, degisiklikler = d.duzelt(metin, paragraf=args.paragraf, ayrinti=True)
-    print(sonuc)
+    if args.cikti:
+        with open(args.cikti, 'w', encoding='utf-8', newline='') as f:
+            f.write(sonuc)
+        print('Yazıldı:', args.cikti)
+    else:
+        print(sonuc)
     if args.ayrinti:
         print('\n--- kelime düzeltmeleri ---')
         for eski, yeni, kaynak in degisiklikler:
