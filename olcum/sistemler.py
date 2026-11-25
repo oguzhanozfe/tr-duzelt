@@ -18,9 +18,10 @@ class HicbirSey:
 
 
 class TrDuzelt:
-    """Bu depodaki yazım düzeltici (noktalama ve büyük harf aşaması hariç). kod: başka bir sürümün klasörü."""
+    """Bu depodaki yazım düzeltici (noktalama ve büyük harf aşaması hariç). kod: başka bir sürümün klasörü.
+    siralayici: öğrenilmiş aday sıralayıcının yolu; None = depodaki siralayici.json (varsa), '' = kullanma."""
 
-    def __init__(self, kod=None, ad='tr-duzelt'):
+    def __init__(self, kod=None, ad='tr-duzelt', siralayici=None):
         self.ad = ad
         yol = os.path.join(kod or KOK, 'tr_duzelt.py')
         spec = importlib.util.spec_from_file_location('tr_duzelt_' + str(abs(hash(yol))), yol)
@@ -28,7 +29,12 @@ class TrDuzelt:
         sys.path.insert(0, os.path.dirname(yol))
         spec.loader.exec_module(self.modul)
         self.lm = self.modul.DilModeli()
-        self.yazim = self.modul.YazimDuzeltici(self.lm)
+        if siralayici is None:
+            siralayici = os.path.join(os.path.dirname(yol), 'siralayici.json')
+        try:
+            self.yazim = self.modul.YazimDuzeltici(self.lm, siralayici or None)
+        except TypeError:                      # sıralayıcıdan önceki sürümler
+            self.yazim = self.modul.YazimDuzeltici(self.lm)
         self._onbellek_yukle()
 
     def _onbellek_yukle(self):
@@ -119,15 +125,41 @@ class SymSpell:
         return r[0].term.split() if r else list(kelimeler)
 
 
+class T5Yazim:
+    """Hugging Face'teki hazır bir seq2seq yazım düzeltme modeli. Varsayılan: cguzel/trspell-t5-efficient-small
+    (~142 milyon parametre, CPU'da çalışır). Ek kurulum:  pip install torch transformers sentencepiece
+    İlk çalıştırmada modeli indirir (~600 MB). NOT: bu sınıf geliştirme ortamında denenemedi (model deposuna erişim yoktu)."""
+
+    def __init__(self, model='cguzel/trspell-t5-efficient-small'):
+        import torch
+        from transformers import AutoModelForSeq2SeqLM, AutoTokenizer
+        self.ad = 't5:' + model
+        self.torch = torch
+        self.tok = AutoTokenizer.from_pretrained(model)
+        self.model = AutoModelForSeq2SeqLM.from_pretrained(model)
+        self.model.eval()
+
+    def __call__(self, kelimeler):
+        girdi = self.tok(' '.join(kelimeler), return_tensors='pt', truncation=True, max_length=256)
+        with self.torch.no_grad():
+            cikti = self.model.generate(**girdi, num_beams=5, max_length=256, early_stopping=True)
+        metin = self.tok.decode(cikti[0], skip_special_tokens=True)
+        return [t for t in (sade(x) for x in metin.split()) if t]
+
+
 def kur(ad, kod=None):
     if ad == 'hicbir-sey':
         return HicbirSey()
     if ad == 'tr-duzelt':
         return TrDuzelt(kod, ad if not kod else 'tr-duzelt@' + os.path.basename(os.path.normpath(kod)))
+    if ad == 'tr-duzelt-sezgisel':             # öğrenilmiş sıralayıcı olmadan, yalnızca elle ayarlı kurallar
+        return TrDuzelt(kod, ad, siralayici='')
     if ad == 'zemberek-normalizer':
         return ZemberekNormalizer()
     if ad == 'zemberek-yazim':
         return ZemberekYazim()
     if ad == 'symspell':
         return SymSpell()
+    if ad == 't5' or ad.startswith('t5:'):
+        return T5Yazim(*ad.split(':', 1)[1:])
     raise SystemExit('bilinmeyen sistem: %s' % ad)

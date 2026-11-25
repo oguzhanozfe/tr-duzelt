@@ -40,6 +40,7 @@ Zemberek ile (özgün kütüphane) çok daha hızlı çalışır. Bu modül içe
 import os
 import re
 import sys
+import json
 import math
 import logging
 import argparse
@@ -380,6 +381,11 @@ C_AKSAN_TAVAN = 1.6     # yalnızca Türkçe karakter farkı (tartismayi -> tart
 C_SOZLUK = 0.3          # elle hazırlanmış sık-yanlışlar tablosu
 C_BILINEN_YANLIS = 6.0  # tabloda "yanlış" diye geçen biçimi (orjinal, herkez) aynen bırakmanın bedeli
 C_KONUSMA = 0.8         # konuşma dili -> yazı dili (gidiyodum -> gidiyordum)
+C_OZEL_GORULMEMIS = 3.0  # yalnızca özel isim olarak "geçerli" olup büyük derlemde hiç geçmeyen kelimeyi aynen bırakmak (yaaa)
+# Aşağıdaki iki kaynak gürültülü olduğu için yalnızca öğrenilmiş sıralayıcı (siralayici.json) varken kullanılır:
+C_TABLO = 1.5           # Zemberek'in derlemden çıkardığı tablodaki karşılık (msj -> mesaj; ama tmm -> "tam" da var)
+C_AKSAN_GECERLI = 2.0   # geçerli bir kelimenin Türkçe karakterli eşi (aksam -> akşam): ancak cümle ASCII yazılmışsa doğru
+C_AYIR_EK = 3.0         # geçerli bir kelimenin sonundaki de/da/ki'yi ayırmak (bende -> ben de)
 C_AYIR = 2.5            # eksik boşluk (vebeni -> ve beni)
 C_OZEL = 1.0            # özel isim adayına ek ceza
 # --- Temkin ayarları: emin olunmayan kelime olduğu gibi bırakılır (issue #2) ---
@@ -520,8 +526,60 @@ def duzenleme_maliyeti(a, b):
     return D[n][m]
 
 
+_TR_HARF = re.compile('[çğıöşü]')
+_KAYNAKLAR = ('aynı', 'sözlük', 'konuşma dili', 'aksan', 'yazım', 'tablo', 'ayırma')
+OZNITELIK_ADLARI = (
+    ['kaynak=' + k for k in _KAYNAKLAR]
+    + ['maliyet', 'uzunluk', 'aday_uzunluk', 'aday_kelime_sayisi']
+    + ['gecerli', 'duzgun', 'dagarcikta', 'siklik', 'ascii', 'tr_harfli', 'yabanci_harf', 'en_uzun_tekrar',
+       'lm_sol', 'lm_sag', 'ikili_sol', 'ikili_sag']
+    + ['aday_duzgun', 'aday_dagarcikta', 'aday_siklik', 'aday_lm_sol', 'aday_lm_sag', 'aday_ikili_sol',
+       'aday_ikili_sag', 'lm_kazanc', 'siklik_farki']
+    + ['sonsal', 'sira', 'aday_sayisi', 'ilk_gecis_secimi']
+    + ['mesafe', 'ilk_harf_farkli', 'son_harf_farkli', 'ascii_esit', 'tekrarsiz_esit', 'ayni_harfler']
+    + ['cumle_uzunluk', 'cumle_gecersiz_orani', 'cumle_tr_harf_orani', 'cumle_aksan_duzeltme_orani',
+       'sol_bilinmeyen', 'sag_bilinmeyen'])
+
+
+def _lev(a, b):
+    """Düz (ağırlıksız) Levenshtein mesafesi."""
+    onceki = list(range(len(b) + 1))
+    for i, ca in enumerate(a, 1):
+        simdiki = [i]
+        for j, cb in enumerate(b, 1):
+            simdiki.append(min(onceki[j] + 1, simdiki[j - 1] + 1, onceki[j - 1] + (ca != cb)))
+        onceki = simdiki
+    return onceki[-1]
+
+
+class Siralayici:
+    """Öğrenilmiş aday sıralayıcı: gradyan artırmalı karar ağaçları. egit_siralayici.py LightGBM ile eğitip JSON'a
+    döker; burada saf Python ile çalıştırılır (çalışma anında ek kütüphane gerekmez)."""
+
+    def __init__(self, yol):
+        with open(yol, encoding='utf-8') as f:
+            m = json.load(f)
+        if m['oznitelikler'] != OZNITELIK_ADLARI:
+            raise ValueError('%s bu kod sürümüyle uyumlu değil: egit_siralayici.py ile yeniden eğitin' % yol)
+        self.agaclar = [(a['f'], a['t'], a['l'], a['r'], a['v']) for a in m['agaclar']]
+        self.esik = float(os.environ.get('TR_DUZELT_ESIK', m.get('esik', 0.5)))
+
+    def olasilik(self, satirlar):
+        out = []
+        for x in satirlar:
+            s = 0.0
+            for f, t, sol, sag, deger in self.agaclar:
+                d = 0
+                while f[d] >= 0:
+                    d = sol[d] if x[f[d]] <= t[d] else sag[d]
+                s += deger[d]
+            out.append(1.0 / (1.0 + math.exp(-s)) if s > -700 else 0.0)
+        return out
+
+
 class YazimDuzeltici:
-    def __init__(self, lm):
+    def __init__(self, lm, siralayici=None):
+        """siralayici: öğrenilmiş aday sıralayıcının (siralayici.json) yolu; yoksa elle ayarlı güven kuralları çalışır."""
         from pkg_resources import resource_filename
         from zemberek import TurkishMorphology, TurkishSpellChecker
         from zemberek.core.turkish import SecondaryPos
@@ -543,6 +601,29 @@ class YazimDuzeltici:
                     k, v = satir.split('=', 1)
                     self.tam.setdefault(k.strip(), v.strip())
         self._gecerli, self._duzgun, self._oneri = {}, {}, {}
+        self._aksanli, self._aday = {}, {}
+        self.tablo = {}
+        self.siralayici = None
+        if siralayici and os.path.exists(siralayici):
+            self.siralayici = Siralayici(siralayici)
+            self._tablo_yukle(resource_filename)
+
+    def _tablo_yukle(self, resource_filename):
+        """Zemberek'in büyük ve gürültülü derlemlerden çıkardığı "yazılan -> olası doğrusu" tabloları (~470 bin satır:
+        benzemıyorsun -> benzemiyorsun, cekiyodu -> çekiyodu, msj -> mesaj). Kesin doğru değiller; yalnızca ADAY
+        üretirler, kararı sıralayıcı verir."""
+        for ad in ('lookup-from-graph.txt', 'ascii-map.txt', 'candidates-manual.txt'):
+            yol = resource_filename('zemberek', os.path.join('resources', 'normalization', ad))
+            with open(yol, encoding='utf-8') as f:
+                for satir in f:
+                    k, esit, v = satir.partition('=')
+                    k = k.strip()
+                    if esit and k:
+                        hedef = self.tablo.setdefault(k, [])
+                        for t in v.split(','):
+                            t = t.strip()
+                            if t and t != k and t not in hedef:
+                                hedef.append(t)
 
     # ---- morfoloji yardımcıları ----
     def gecerli(self, w):
@@ -630,8 +711,39 @@ class YazimDuzeltici:
             return self.lm.tekli(c) >= OZEL_ADAY_ESIK
         return True
 
-    def adaylar(self, w):
-        """{aday(lar) demeti: (maliyet, kaynak)}"""
+    def aksan_secenekleri(self, w):
+        """Geçerli ve tümüyle ASCII yazılmış bir kelimenin Türkçe karakterli eşleri: aksam -> akşam, isime -> işime."""
+        v = self._aksanli.get(w)
+        if v is None:
+            v = []
+            if w == w.translate(_ASCII) and any(ch in 'cgiosu' for ch in w):
+                for a in self.gayriresmi.analyze(w):
+                    try:
+                        if a.is_unknown() or a.contains_informal_morpheme():
+                            continue
+                        yuzeyler = [r.surface for r in
+                                    self.morph.word_generator.generate(item=a.item, morphemes=a.get_morphemes())]
+                    except Exception:
+                        continue
+                    for y in yuzeyler:
+                        y = tr_lower(y)
+                        if (y != w and y not in v and y.translate(_ASCII) == w
+                                and self.duzgun(y) and self.lm.idx(y) > 0):
+                            v.append(y)
+            self._aksanli[w] = v
+        return v
+
+    def adaylar(self, w, genis=False):
+        """{aday(lar) demeti: (maliyet, kaynak)}
+        genis=True: gürültülü kaynakları da kat (Zemberek tabloları, geçerli kelimelerin aksanlı eşleri).
+        Bunlar tek başına zarar veriyor (ölçüm: tablolar 32 doğru düzeltmeye karşı 74 yanlış getirdi); yalnızca
+        kararı öğrenilmiş sıralayıcı verirken kullanılır."""
+        anahtar = (w, genis)
+        if anahtar not in self._aday:
+            self._aday[anahtar] = self._adaylar(w, genis)
+        return self._aday[anahtar]
+
+    def _adaylar(self, w, genis):
         C = {}
 
         def ekle(c, maliyet, kaynak):
@@ -642,14 +754,19 @@ class YazimDuzeltici:
         if not w.isalpha():        # sayı, ya da kesme işaretli kelime (büyük olasılıkla özel isim + ek)
             return {(w,): (0.0, 'aynı')}
         gecerli = self.gecerli(w)
-        ekle((w,), 0.0 if gecerli else (C_BILINMEYEN_LM if self.lm.idx(w) > 0 else C_BILINMEYEN), 'aynı')
+        if gecerli:
+            ayni = 0.0 if (self.lm.idx(w) > 0 or self.duzgun(w)) else C_OZEL_GORULMEMIS
+        else:
+            ayni = C_BILINMEYEN_LM if self.lm.idx(w) > 0 else C_BILINMEYEN
+        ekle((w,), ayni, 'aynı')
 
+        olagan = gecerli and self.duzgun(w)      # özel isim / kısaltma dışında bir çözümü var
         if w in self.tam:
             ekle(self.tam[w], C_SOZLUK, 'sözlük')
         wa = w.translate(_ASCII)
         for yanlis, dogru in GOVDE_DUZELT.items():
             tam_eslesme = w.startswith(yanlis)
-            if tam_eslesme or (not gecerli and wa.startswith(_GOVDE_ASCII[yanlis])):   # sarz -> şarj
+            if tam_eslesme or (not olagan and wa.startswith(_GOVDE_ASCII[yanlis])):   # sarz -> şarj, hersey -> her şey
                 aday = (dogru + w[len(yanlis):]).split()
                 if all(self.gecerli(t) for t in aday):
                     ekle(aday, C_SOZLUK + (0.0 if tam_eslesme else 0.8), 'sözlük')
@@ -657,7 +774,16 @@ class YazimDuzeltici:
                     C[(w,)] = (max(C[(w,)][0], C_BILINEN_YANLIS), 'aynı')
         if w in KONUSMA_GECERLI:
             ekle(KONUSMA_GECERLI[w], C_KONUSMA, 'konuşma dili')
-        if gecerli and self.duzgun(w):
+        if olagan:
+            if genis:
+                for c in self.aksan_secenekleri(w):
+                    ekle(c, C_AKSAN_GECERLI, 'aksan')
+                # bitişik yazılmış de/da/ki bağlacı (bende -> ben de, oda -> o da): kelime geçerli olduğu için
+                # ancak bağlama bakarak karar verilebilir; kararı sıralayıcı verir
+                for ek, ayri in (('de', 'de'), ('da', 'da'), ('te', 'de'), ('ta', 'da'), ('ki', 'ki')):
+                    govde = w[:-2]
+                    if w.endswith(ek) and govde and self.duzgun(govde) and self.lm.idx(govde) > 0:
+                        ekle((govde, ayri), C_AYIR_EK, 'ayırma')
             return C
 
         kisa = len(w) <= KISA_SINIR
@@ -670,6 +796,12 @@ class YazimDuzeltici:
             # kısa kelimede (du -> dü) ancak aday belirgin biçimde daha sıksa
             if self.tanidik(c) and (not kisa or self.lm.tekli(c) >= self.lm.tekli(w) + 2.0):
                 ekle(c, min(duzenleme_maliyeti(w, c), C_AKSAN_TAVAN), 'aksan')
+        if genis:
+            for t in self.tablo.get(w, ()):
+                # tablodaki karşılık da konuşma dili olabilir (cekiyodu -> çekiyodu): yazı diline çevir
+                for c in ([t] if self.duzgun(t) else self.konusma_dili(t)[0]):
+                    if self.tanidik(c):
+                        ekle(c, C_TABLO, 'tablo')
         if gecerli:
             # Yalnızca özel isim/kısaltma olarak "geçerli" (boyle, hayatin, yaaa): Zemberek'in özel isim sözlüğü
             # çok geniş olduğu için küçük harfle yazılmış böyle bir kelime çoğu zaman Türkçe karakteri eksik ya da
@@ -694,10 +826,13 @@ class YazimDuzeltici:
             for c in secilen:
                 ekle(c, duzenleme_maliyeti(w, c) + (C_OZEL if "'" in c else 0.0)
                      + (C_ILK_HARF if c[0] != w[0] else 0.0), 'yazım')
-        m = _SORU_EKI.match(w)                               # gelcekmisin -> gelecek misin
-        if m and len(m.group(1)) >= 3 and not self.duzgun(m.group(1)):
-            for c in self.konusma_dili(m.group(1))[0]:
-                ekle((c, m.group(2)), C_AYIR + C_KONUSMA, 'ayırma')
+        m = _SORU_EKI.match(w)
+        if m and len(m.group(1)) >= 3:
+            if self.duzgun(m.group(1)):                      # atarmısınız -> atar mısınız
+                ekle((m.group(1), m.group(2)), C_AYIR, 'ayırma')
+            else:                                            # gelcekmisin -> gelecek misin
+                for c in self.konusma_dili(m.group(1))[0]:
+                    ekle((c, m.group(2)), C_AYIR + C_KONUSMA, 'ayırma')
         n = len(w)
         for k in range(1, n):                                # eksik boşluk: vebeni -> ve beni
             a, b = w[:k], w[k:]
@@ -800,7 +935,89 @@ class YazimDuzeltici:
                 sonuc[pi + 1] = (c, kaynak)
             i, durum = pi, onceki
         self._guven_denetimi(kelimeler, sonuc, tek)
+        if self.siralayici is not None:
+            self._siralayici_karari(kelimeler, sonuc)
         return self._gercek_kelime(sonuc)
+
+    # ---- öğrenilmiş sıralayıcı: her aday için "bu aday doğru mu?" olasılığı ----
+    def aday_satirlari(self, kelimeler, sonuc):
+        """Sıralayıcının göreceği tablo: [(konum, [(aday, öznitelik vektörü)])]. Eğitim (egit_siralayici.py) ve
+        çalışma anı AYNI fonksiyonu kullanır. sonuc: elle ayarlı ilk geçişin çıktısı (komşu kelimeler oradan alınır)."""
+        lm = self.lm
+        n = len(kelimeler)
+        tek = [self.adaylar(w, genis=True) for w in kelimeler]
+        gecersiz = [w.isalpha() and not self.gecerli(w) for w in kelimeler]
+        ozet = [float(n), sum(gecersiz) / n,
+                sum(1 for w in kelimeler if _TR_HARF.search(w)) / n,
+                sum(1 for w, C in zip(kelimeler, tek)
+                    if not (self.gecerli(w) and self.duzgun(w)) and any(k == 'aksan' for _, k in C.values())) / n]
+        out = []
+        for i, w in enumerate(kelimeler):
+            if not sonuc[i][0] or sonuc[i][1] == 'birleştirme' or len(tek[i]) < 2:
+                continue                     # birleştirmeler ilk geçişte kararlaştırılır; tek adaylıda karar yok
+            on, art = '<s>', '</s>'
+            for k in range(i - 1, -1, -1):
+                if sonuc[k][0]:
+                    on = sonuc[k][0][-1]
+                    break
+            for k in range(i + 1, n):
+                if sonuc[k][0]:
+                    art = sonuc[k][0][0]
+                    break
+            skor = {}
+            for c, (maliyet, _) in tek[i].items():
+                skor[c] = (lm.lp(on, c[0]) + sum(lm.lp(c[k - 1], c[k]) for k in range(1, len(c)))
+                           + lm.lp(c[-1], art) - maliyet)
+            tepe = max(skor.values())
+            toplam = sum(math.exp(v - tepe) for v in skor.values())
+            sira = {c: r for r, c in enumerate(sorted(skor, key=skor.get, reverse=True))}
+            wt = lm.tekli(w)
+            wt = wt if wt > -1e9 else -25.0
+            sol_w, sag_w = lm.lp(on, w), lm.lp(w, art)
+            w_oz = [float(self.gecerli(w)), float(self.duzgun(w)), float(lm.idx(w) > 0), wt,
+                    float(w == w.translate(_ASCII)), float(bool(_TR_HARF.search(w))), float(bool(YABANCI_HARF & set(w))),
+                    float(max((m.end() - m.start() for m in _TEKRAR.finditer(w)), default=1)),
+                    sol_w, sag_w, float(lm.var(on, w)), float(lm.var(w, art))]
+            komsu = [float(i > 0 and gecersiz[i - 1] and sonuc[i - 1][0] == (kelimeler[i - 1],)),
+                     float(i + 1 < n and gecersiz[i + 1] and sonuc[i + 1][0] == (kelimeler[i + 1],))]
+            satirlar = []
+            for c, (maliyet, kaynak) in tek[i].items():
+                cl = ''.join(c).replace("'", '')
+                ct = min(lm.tekli(t) for t in c)
+                ct = ct if ct > -1e9 else -25.0
+                sol_c, sag_c = lm.lp(on, c[0]), lm.lp(c[-1], art)
+                ic = sum(lm.lp(c[k - 1], c[k]) for k in range(1, len(c)))
+                v = [float(kaynak == k) for k in _KAYNAKLAR]
+                v += [maliyet, float(len(w)), float(len(cl)), float(len(c))]
+                v += w_oz
+                v += [float(all(self.duzgun(t) for t in c)), float(all(lm.idx(t) > 0 for t in c)), ct,
+                      sol_c, sag_c, float(lm.var(on, c[0])), float(lm.var(c[-1], art)),
+                      (sol_c + ic + sag_c) - (sol_w + sag_w), ct - wt]
+                v += [math.exp(skor[c] - tepe) / toplam, float(sira[c]), float(len(tek[i])), float(sonuc[i][0] == c)]
+                v += [float(_lev(w, cl)), float(w[0] != cl[0]), float(w[-1] != cl[-1]),
+                      float(w.translate(_ASCII) == cl.translate(_ASCII)),
+                      float(_TEKRAR.sub(r'\1', w) == _TEKRAR.sub(r'\1', cl)), float(sorted(w) == sorted(cl))]
+                v += ozet + komsu
+                satirlar.append((c, v))
+            out.append((i, satirlar))
+        return out
+
+    def _siralayici_karari(self, kelimeler, sonuc):
+        """Elle ayarlı ilk geçişin kararlarını öğrenilmiş sıralayıcının kararlarıyla değiştir. Her aday için
+        "doğru kelime bu mu?" olasılığı hesaplanır; kelimenin kendisinden farklı en iyi aday, olasılığı hem eşiği
+        hem de "olduğu gibi bırak" seçeneğini geçiyorsa uygulanır. Eşik yükseldikçe daha az ama daha emin düzeltir."""
+        esik = self.siralayici.esik
+        for i, satirlar in self.aday_satirlari(kelimeler, sonuc):
+            if sonuc[i][1] == 'sözlük':
+                continue        # elle yazılmış kural tablosundan gelen düzeltme kesindir: eklenen kural her zaman işler
+            p = self.siralayici.olasilik([v for _, v in satirlar])
+            ayni = (kelimeler[i],)
+            p_ayni = max((pi for (c, _), pi in zip(satirlar, p) if c == ayni), default=0.0)
+            en_iyi, p_en = max(((c, pi) for (c, _), pi in zip(satirlar, p) if c != ayni), key=lambda x: x[1])
+            if p_en >= esik and p_en > p_ayni:
+                sonuc[i] = (en_iyi, self.adaylar(kelimeler[i], genis=True)[en_iyi][1])
+            else:
+                sonuc[i] = (ayni, 'aynı')
 
     def _guven_denetimi(self, kelimeler, sonuc, tek):
         """Düzenleme mesafesiyle bulunan ('yazım') düzeltmeleri süz. Kelime şu durumlarda tahmine
@@ -1067,15 +1284,19 @@ _COK_BOSLUK = re.compile(r'[ \t]{2,}')
 class Duzeltici:
     def __init__(self, model_yolu):
         self.lm = DilModeli()
-        self.yazim = YazimDuzeltici(self.lm)
+        self.yazim = YazimDuzeltici(self.lm, os.path.join(os.path.dirname(os.path.abspath(model_yolu)), 'siralayici.json'))
         self.nokta = Noktalayici(model_yolu, self.lm, self.yazim.morph)
 
     def duzelt(self, metin, paragraf=False, ayrinti=False):
         metin = metin.replace('’', "'")
         degisiklikler = []
         # --- 0a) hiç Türkçe karakter yoksa metin ASCII klavyeyle yazılmıştır: önce hepsini geri koy
-        #         (Yüret'in örüntü tabanlı deasciifier'ı; Zemberek içinde geliyor)
-        if sum(ch.isalpha() for ch in metin) >= 20 and not re.search('[çğışöüÇĞİŞÖÜ]', metin):
+        #         (Yüret'in örüntü tabanlı deasciifier'ı; Zemberek içinde geliyor).
+        #         Sıralayıcı varken bu ön adım atlanır: o, Türkçe karakterli eşleri kelime kelime aday olarak tartıyor.
+        #         Ölçüm (tümüyle ASCII yazılmış 364 gerçek tweet): yalnız sıralayıcı %79,7 düzeltiyor, doğru kelimelerin
+        #         %0,40'ını bozuyor; ön adımla birlikte %85,6 düzeltiyor ama %2,13'ünü bozuyor (go -> "gö" gibi).
+        if (self.yazim.siralayici is None and sum(ch.isalpha() for ch in metin) >= 20
+                and not re.search('[çğışöüÇĞİŞÖÜ]', metin)):
             from zemberek.normalization.deasciifier.deasciifier import Deasciifier
             metin = Deasciifier(metin).convert_to_turkish()
             degisiklikler.append(('(tüm metin)', 'Türkçe karakterler geri kondu', 'deasciifier'))
