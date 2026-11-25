@@ -266,8 +266,8 @@ Sonuç (gerçek tweetler, test):
 |---|---|---|---|
 | Varsayılan | %72,7 | %2,7 | %0,27 |
 | `--bert` | %75,7 | %2,7 | %0,35 |
-| Eşik 0,9 | %66,0 | %1,9 | %0,12 |
-| `--bert`, eşik 0,9 | %68,9 | %1,8 | %0,13 |
+| `--temkinli` (eşik 0,9) | %66,0 | %1,9 | %0,12 |
+| `--bert --temkinli` | %68,9 | %1,8 | %0,13 |
 
 Yapay testlerde fark daha açık: cümlede tek yazım hatası %84'ten %89'a, üç yazım hatası %85'ten %90'a.
 
@@ -290,7 +290,7 @@ python tr_duzelt.py --bert "olum sen ordayim diyosun ama gelmedin"
 - **Virgül.** Model yalnızca çok emin olduğunda virgül koyar; eksik virgül çok kalır.
 - **Devrik cümle, konuşma, liste.** Noktalama modeli düz anlatımda iyi, bunlarda zayıf. `Aslan kaçtı ormana` cümlesini `Aslan kaçtı. Ormana…` diye bölebilir.
 - **Paragraf.** Denenen yöntem rastgele bölmekten iyi çıkmadı; kodda duruyor ama kapalı (`--paragraf`).
-- **Hız.** `zemberek-python` saf Python olduğu için yavaş: açılış yaklaşık 20 saniye, sonra kelime başına kabaca 10–40 milisaniye.
+- **Hız.** `zemberek-python` saf Python olduğu için yavaş: açılış yaklaşık 20 saniye, sonra tek süreçte saniyede kabaca 25-35 kelime (bütün aşamalar). Büyük dökümler için `--toplu` birden çok süreç kullanır; süreler [Kullanım](#kullanım) bölümünde.
 
 ## Kural eklemek ve LLM'in rolü
 
@@ -369,7 +369,42 @@ python tr_duzelt.py "herkez geldimi bilmiyorum"
 python tr_duzelt.py --yolculuk "..."                       # adım adım: hangi kelimeye neden dokunuldu
 python tr_duzelt.py --dosya girdi.txt --ayrinti            # yapılan kelime düzeltmelerini de listeler
 python tr_duzelt.py --dosya girdi.txt --cikti cikti.txt    # sonucu UTF-8 dosyaya yazar
+python tr_duzelt.py --temkinli "..."                        # yalnızca çok emin olduğunu düzeltir (yanlış ~%2)
+python tr_duzelt.py --bert "..."                            # cümlenin tamamına bakar (bkz. BERT kipi)
 ```
+
+**Büyük dökümler (100 bin – 200 bin metin).** Her satırı ayrı bir metin sayar, çıktıya aynı sırayla satır satır yazar:
+
+```bash
+python tr_duzelt.py --toplu dokum.txt --cikti duzeltilmis.txt              # varsayılan: çekirdek - 1 süreç, en çok 8
+python tr_duzelt.py --toplu dokum.txt --cikti duzeltilmis.txt --isci 3     # dizüstü: 3 süreç
+python tr_duzelt.py --toplu dokum.txt --cikti duzeltilmis.txt --bert       # BERT kipi
+```
+
+- Girdideki her satıra çıktıda tam bir satır karşılık gelir. Bir satırda beklenmedik bir hata olursa o satır olduğu gibi yazılır, iş durmaz.
+- Yarıda kalırsa (elektrik, Ctrl+C) aynı komutu yeniden çalıştırın: çıktıda bitmiş satırlar atlanır, kalan yerden devam eder.
+- Her süreç ~2 GB bellek tutar. İlerleme ve tahmini kalan süre ekrana yazılır.
+
+Ölçülen süreler. Girdi: 2.000 gerçek tweet, satır başına ortalama 8,5 kelime. İlk geçiş, önbellek soğukken. 32 çekirdekli bir masaüstü, ekran kartı kapalı:
+
+| Kip | Süreç | Saniyede satır | 100 bin metin | 200 bin metin |
+|---|---|---|---|---|
+| Varsayılan | 8 | 24 | ~70 dk | ~2,3 saat |
+| Varsayılan | 3 (dizüstü gibi) | 11 | ~2,5 saat | ~5 saat |
+| `--bert`, yalnızca işlemci | 8 | 17 | ~1,6 saat | ~3,3 saat |
+
+Metinleriniz daha uzunsa süre kelime sayısıyla orantılı uzar (8 süreçle saniyede ~200 kelime).
+
+Kendi yazdığımız 20 düzeltilmemiş metin ve iki kipin çıktısı `ornekler/` klasöründe (`girdi.txt`, `cikti.txt`, `cikti_bert.txt`). Bir kaçı:
+
+| Girdi | Varsayılan | `--bert` |
+|---|---|---|
+| herkez bu filmi izlemis bende izlemek istiyorum ama vaktim yok | Herkes bu filmi izlemiş bende izlemek istiyorum ama vaktim yok. | Herkes bu filmi izlemiş. Ben de izlemek istiyorum ama vaktim yok. |
+| hocam odevi yarina kadar teslim edebilirmiyiz cok yogunuz bu hafta | Hocam ödevi yarına kadar teslim edebilir miyiz? Çok yoğunuz. Bu hafta. | Hocam ödevi yarına kadar teslim edebilir miyiz? Çok yoğunuz bu hafta. |
+| yarin hava nasil olcak bilen varmi yagmur yagicak mi | Yarın hava nasıl olacak bilen var mı? Yağmur yagicak mi? | Yarın hava nasıl olacak? Bilen var mı? Yağmur yagicak mı? |
+| giriyorm simdi toplantiya sonra konusuruz tmm mı | Giriyorum şimdi. Toplantıya sonra konuşuruz tamam mı? | Giriyorum şimdi toplantıya. Sonra konuşuruz tamam mı? |
+
+Son iki satır kalan zayıflıkları da gösteriyor: `yagicak` (yağacak) gibi gelecek zamanın konuşma biçimleri her zaman düzelmiyor.
 
 **Ne kadar cesur olsun?** `TR_DUZELT_ESIK` ortam değişkeni sıralayıcının eşiğini değiştirir (varsayılan 0,7; geliştirme tweetlerinde seçildi). Yükseltirseniz daha az ama daha emin düzeltir. Gerçek tweetlerin test bölümünde:
 
@@ -416,7 +451,8 @@ print(d.duzelt("herkez geldimi bilmiyorum"))
 | `siralayici_bert.json` | `--bert` kipinin sıralayıcısı: aynı 50 ipucu + BERTurk'ün 5 ipucu (1,3 MB) |
 | `egit_noktalama_bert.py` | `--bert` kipinin noktalama modelini (`noktalama_bert/`) eğitir |
 | `olcum/` | Ölçüm düzeneği: `veri.py` test setlerini kurar, `olcut.py` sayar, `sistemler.py` karşılaştırılan yöntemler, `olc.py` çalıştırır; `hata_turleri.py` hata türüne göre döküm verir, `esik_tara.py` sıralayıcının eşiğini tarar |
-| `tr_eval.py`, `tests/` | İsteğe bağlı Gemini denetimi ve testleri |
+| `tr_eval.py`, `tests/` | İsteğe bağlı Gemini denetimi ve testleri (kural geçişi ve BERT kararı için de) |
+| `ornekler/` | Kendi yazdığımız 20 düzeltilmemiş metin ve iki kipin çıktısı |
 | `CLAUDE.md` | Projeyi devralacak geliştirici (ya da Claude Code) için notlar: kurallar, tuzaklar, sıradaki işler |
 
 ## Modelleri yeniden eğitmek

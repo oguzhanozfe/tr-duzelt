@@ -1802,6 +1802,68 @@ def dosya_oku(yol):
         return ham.decode('cp1254', errors='replace')
 
 
+# ---- toplu düzeltme: büyük metin dökümleri (her satır bir metin) ----
+_ISCI = None
+
+
+def _isci_baslat(model, bert):
+    global _ISCI
+    _ISCI = Duzeltici(model, bert=bert)
+
+
+def _isci_duzelt(satir):
+    if not satir.strip():
+        return satir
+    try:
+        return _ISCI.duzelt(satir).replace('\r', ' ').replace('\n', ' ')
+    except Exception:          # tek bir satırın hatası bütün işi durdurmasın: o satır olduğu gibi kalır
+        return satir
+
+
+def toplu_duzelt(girdi, cikti, model, isci=None, bert=False, cikti_akisi=sys.stderr):
+    """girdi dosyasının her satırını ayrı bir metin olarak düzeltip cikti dosyasına AYNI SIRADA, satır satır yazar.
+    Yarıda kalırsa yeniden çalıştırın: çıktıda tamamlanmış satırlar atlanır, kalan yerden devam edilir."""
+    import multiprocessing as mp
+    import time
+    satirlar = dosya_oku(girdi).replace('\r\n', '\n').replace('\r', '\n').split('\n')
+    if satirlar and satirlar[-1] == '':
+        satirlar.pop()
+    bitmis = 0
+    if os.path.exists(cikti):
+        with open(cikti, 'rb') as f:
+            ham = f.read()
+        tam = ham[:ham.rfind(b'\n') + 1]            # yarım yazılmış son satırı at
+        bitmis = tam.count(b'\n')
+        if len(tam) != len(ham):
+            with open(cikti, 'wb') as f:
+                f.write(tam)
+    kalan = satirlar[bitmis:]
+    print('%d satır; %d tanesi zaten düzeltilmiş, %d kaldı' % (len(satirlar), bitmis, len(kalan)), file=cikti_akisi)
+    if not kalan:
+        return
+    isci = isci or max(1, min((os.cpu_count() or 2) - 1, 8))     # her süreç ~1,5-2 GB bellek tutar (Zemberek + dil modeli)
+    # torch (BERT kipi) her süreçte bütün çekirdekleri kullanmaya kalkmasın
+    os.environ.setdefault('OMP_NUM_THREADS', str(max(1, (os.cpu_count() or 2) // isci)))
+    t0 = time.time()
+    with open(cikti, 'a', encoding='utf-8', newline='\n') as f:
+        if isci == 1:
+            _isci_baslat(model, bert)
+            sonuclar = map(_isci_duzelt, kalan)
+        else:
+            havuz = mp.Pool(isci, initializer=_isci_baslat, initargs=(model, bert))
+            sonuclar = havuz.imap(_isci_duzelt, kalan, chunksize=4)
+        for k, sonuc in enumerate(sonuclar, 1):
+            f.write(sonuc + '\n')
+            if k % 200 == 0 or k == len(kalan):
+                f.flush()
+                gecen = time.time() - t0
+                print('  %d/%d satır, %.0f sn, tahmini kalan %.0f dk' % (
+                    bitmis + k, len(satirlar), gecen, gecen / k * (len(kalan) - k) / 60), file=cikti_akisi, flush=True)
+        if isci > 1:
+            havuz.close()
+            havuz.join()
+
+
 def main():
     ap = argparse.ArgumentParser(description='LLM kullanmadan Türkçe metin düzeltme')
     ap.add_argument('metin', nargs='?')
@@ -1815,15 +1877,30 @@ def main():
                     help='düzeltmeyi Gemini ile uzaktan değerlendir (metni Google’a gönderir)')
     ap.add_argument('--eval-model', default=DEFAULT_MODEL,
                     help='--eval için Gemini model adı (varsayılan: %(default)s)')
+    ap.add_argument('--toplu', metavar='DOSYA',
+                    help='büyük döküm: her satırı ayrı metin olarak düzelt, --cikti dosyasına satır satır yaz '
+                         '(yarıda kalırsa aynı komutla kaldığı yerden sürer)')
+    ap.add_argument('--isci', type=int, help='--toplu için paralel süreç sayısı (varsayılan: çekirdek sayısı - 1, en çok 8; süreç başına ~2 GB bellek)')
+    ap.add_argument('--esik', type=float,
+                    help='sıralayıcının eşiği (0-1): yükseldikçe daha az ama daha emin düzeltir (TR_DUZELT_ESIK ile aynı)')
+    ap.add_argument('--temkinli', action='store_true',
+                    help='yalnızca çok emin olduğunu düzelt (eşik 0,9): yanlış düzeltme ~%%2, düzeltilen biraz azalır')
     ap.add_argument('--bert', action='store_true',
                     help="kelime seçiminde BERTurk'ün cümle bağlamına da bak (daha az yanlış düzeltme; torch ister)")
     ap.add_argument('--paragraf', action='store_true',
                     help='deneysel paragraf bölmeyi aç (ölçümde rastgeleden iyi çıkmadı)')
     args = ap.parse_args()
+    if args.esik is not None or args.temkinli:       # ortam değişkeni toplu kipteki süreçlere de geçer
+        os.environ['TR_DUZELT_ESIK'] = str(args.esik if args.esik is not None else 0.9)
     # Çıktı dosyaya/boruya yönlendirilmişse Windows varsayılan olarak ANSI yazar; UTF-8'e sabitle.
     for akis in (sys.stdout, sys.stderr):
         if hasattr(akis, 'reconfigure') and not akis.isatty():
             akis.reconfigure(encoding='utf-8')
+    if args.toplu:
+        if not args.cikti:
+            ap.error('--toplu için --cikti gerekli')
+        toplu_duzelt(args.toplu, args.cikti, args.model, args.isci, args.bert)
+        return
     metin = dosya_oku(args.dosya) if args.dosya else (args.metin or sys.stdin.read())
     api_key = os.environ.get('GEMINI_API_KEY')
     if args.eval and not api_key:
