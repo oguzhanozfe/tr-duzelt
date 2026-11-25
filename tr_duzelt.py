@@ -433,6 +433,8 @@ GOVDE_DUZELT = {
     'birşey': 'bir şey', 'herşey': 'her şey', 'hiçbirşey': 'hiçbir şey', 'hergün': 'her gün',
     'herzaman': 'her zaman', 'pekçok': 'pek çok', 'hiçkimse': 'hiç kimse', 'birsürü': 'bir sürü',
     'şuan': 'şu an', 'dahada': 'daha da',
+    # TDK'de her bağlamda ayrı yazılanlar (boş vermek, peş peşe, sağ olmak, bir gün)
+    'boşver': 'boş ver', 'peşpeşe': 'peş peşe', 'sağolsun': 'sağ olsun', 'sağolun': 'sağ olun', 'birgün': 'bir gün',
 }
 # Tam eşleşme: kısaltmalar ve bitişik yazılan bağlaçlar
 TAM_DUZELT = {
@@ -938,7 +940,25 @@ class YazimDuzeltici:
         self._guven_denetimi(kelimeler, sonuc, tek)
         if self.siralayici is not None:
             self._siralayici_karari(kelimeler, sonuc)
+        self._kural_son_gecis(kelimeler, sonuc)
         return self._gercek_kelime(sonuc)
+
+    def _kural_son_gecis(self, kelimeler, sonuc):
+        """Seçilen düzeltme, kural tablolarının "yanlış" dediği bir biçimse onu da düzelt: hersey -> (aksan) herşey ->
+        her şey, bıde -> bide -> bir de. Aday üretimi girdiye bakar; seçilen adayın kendisi tablodan geçmemiş olabilir."""
+        for i, (c, kaynak) in enumerate(sonuc):
+            if not c or c == (kelimeler[i],) or kaynak == 'sözlük':
+                continue
+            yeni = []
+            for t in c:
+                d = TAM_DUZELT.get(t)
+                if d is None:
+                    d = next((dogru + t[len(yanlis):] for yanlis, dogru in GOVDE_DUZELT.items()
+                              if t.startswith(yanlis)), None)
+                parca = d.split() if d else [t]
+                yeni += parca if all(self.gecerli(x) for x in parca) else [t]
+            if tuple(yeni) != c:
+                sonuc[i] = (tuple(yeni), 'sözlük')
 
     # ---- öğrenilmiş sıralayıcı: her aday için "bu aday doğru mu?" olasılığı ----
     def _deasciifier(self, kelimeler):
