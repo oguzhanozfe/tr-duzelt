@@ -538,7 +538,8 @@ OZNITELIK_ADLARI = (
     + ['sonsal', 'sira', 'aday_sayisi', 'ilk_gecis_secimi']
     + ['mesafe', 'ilk_harf_farkli', 'son_harf_farkli', 'ascii_esit', 'tekrarsiz_esit', 'ayni_harfler']
     + ['cumle_uzunluk', 'cumle_gecersiz_orani', 'cumle_tr_harf_orani', 'cumle_aksan_duzeltme_orani',
-       'sol_bilinmeyen', 'sag_bilinmeyen'])
+       'sol_bilinmeyen', 'sag_bilinmeyen']
+    + ['deasciifier_aday', 'deasciifier_ayni'])
 
 
 def _lev(a, b):
@@ -940,6 +941,16 @@ class YazimDuzeltici:
         return self._gercek_kelime(sonuc)
 
     # ---- öğrenilmiş sıralayıcı: her aday için "bu aday doğru mu?" olasılığı ----
+    def _deasciifier(self, kelimeler):
+        """Zemberek'teki örüntü tabanlı Deasciifier'ın (Yüret) her kelime için önerisi. Tek başına uygulanınca doğru
+        kelimelerin ~%2'sini bozuyor (go -> "gö"); burada yalnızca sıralayıcıya "ikinci görüş" özniteliği olarak girer."""
+        try:
+            from zemberek.normalization.deasciifier.deasciifier import Deasciifier
+            out = [tr_lower(t) for t in Deasciifier(' '.join(kelimeler)).convert_to_turkish().split()]
+        except Exception:
+            return None
+        return out if len(out) == len(kelimeler) else None
+
     def aday_satirlari(self, kelimeler, sonuc):
         """Sıralayıcının göreceği tablo: [(konum, [(aday, öznitelik vektörü)])]. Eğitim (egit_siralayici.py) ve
         çalışma anı AYNI fonksiyonu kullanır. sonuc: elle ayarlı ilk geçişin çıktısı (komşu kelimeler oradan alınır)."""
@@ -951,6 +962,7 @@ class YazimDuzeltici:
                 sum(1 for w in kelimeler if _TR_HARF.search(w)) / n,
                 sum(1 for w, C in zip(kelimeler, tek)
                     if not (self.gecerli(w) and self.duzgun(w)) and any(k == 'aksan' for _, k in C.values())) / n]
+        da = self._deasciifier(kelimeler)
         out = []
         for i, w in enumerate(kelimeler):
             if not sonuc[i][0] or sonuc[i][1] == 'birleştirme' or len(tek[i]) < 2:
@@ -998,6 +1010,7 @@ class YazimDuzeltici:
                       float(w.translate(_ASCII) == cl.translate(_ASCII)),
                       float(_TEKRAR.sub(r'\1', w) == _TEKRAR.sub(r'\1', cl)), float(sorted(w) == sorted(cl))]
                 v += ozet + komsu
+                v += [float(da is not None and len(c) == 1 and c[0] == da[i]), float(da is not None and da[i] == w)]
                 satirlar.append((c, v))
             out.append((i, satirlar))
         return out

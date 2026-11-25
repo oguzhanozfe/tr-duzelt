@@ -55,9 +55,18 @@ class TrDuzelt:
         def yaz():
             if sum(len(getattr(self.yazim, a)) for a in alanlar) > ilk:
                 os.makedirs(os.path.dirname(yol), exist_ok=True)
-                with open(yol + '.tmp', 'wb') as f:
+                if os.path.exists(yol):            # bu arada başka bir süreç yazmış olabilir: onunkini de koru
+                    try:
+                        with open(yol, 'rb') as f:
+                            for alan, deger in zip(alanlar, pickle.load(f)):
+                                for k, v in deger.items():
+                                    getattr(self.yazim, alan).setdefault(k, v)
+                    except Exception:
+                        pass
+                gecici = '%s.%d.tmp' % (yol, os.getpid())
+                with open(gecici, 'wb') as f:
                     pickle.dump(tuple(getattr(self.yazim, a) for a in alanlar), f)
-                os.replace(yol + '.tmp', yol)
+                os.replace(gecici, yol)
         atexit.register(yaz)
 
     def gecerli(self, w):
@@ -113,7 +122,7 @@ class SymSpell:
 
     def __init__(self, tr=None):
         from symspellpy import SymSpell as _S
-        tr = tr or TrDuzelt()
+        tr = tr or TrDuzelt(siralayici='')
         self.s = _S(max_dictionary_edit_distance=2, prefix_length=7)
         lm = tr.lm
         for w in lm.V.vocabulary:

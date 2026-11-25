@@ -36,7 +36,7 @@ def main():
     a = ap.parse_args()
 
     sistem = sistemler.kur(a.sistem, a.kod)
-    gecerli = sistem.gecerli if hasattr(sistem, 'gecerli') else sistemler.TrDuzelt().gecerli
+    gecerli = sistem.gecerli if hasattr(sistem, 'gecerli') else sistemler.TrDuzelt(siralayici='').gecerli
     setler = veri.butun_setler(gecerli)
     print('sistem: %s' % sistem.ad)
     print('%-28s %6s %6s | %10s %9s %11s | %8s | %6s %5s' % (
