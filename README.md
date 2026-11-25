@@ -229,6 +229,7 @@ Kendiniz ölçmek için (veriler ilk çalıştırmada indirilir):
 python olcum/olc.py                                   # bu depo, bütün setler
 python olcum/olc.py --sistem zemberek-normalizer      # başka bir yöntem
 python olcum/olc.py --set gercek-test --ornek 5       # hatalı örnekleri de göster
+python olcum/hata_turleri.py                          # hangi tür hataların kaçı düzeliyor
 ```
 
 **Noktalama ve büyük harf** (F1: 1 = kusursuz; eğitimde hiç görülmemiş belgeler):
@@ -366,8 +367,9 @@ print(d.duzelt("herkez geldimi bilmiyorum"))
 | `noktalama.crfsuite` | Öğrenilmiş noktalama + büyük harf modeli (5,6 MB) |
 | `egit_siralayici.py` | Sıralayıcıyı eğitir (cümleleri bozar, adayları çıkarır, modeli kurar) |
 | `egit_noktalama.py` | Noktalama modelini eğitir |
-| `olcum/` | Ölçüm düzeneği: `veri.py` test setlerini kurar, `olcut.py` sayar, `sistemler.py` karşılaştırılan yöntemler, `olc.py` çalıştırır |
+| `olcum/` | Ölçüm düzeneği: `veri.py` test setlerini kurar, `olcut.py` sayar, `sistemler.py` karşılaştırılan yöntemler, `olc.py` çalıştırır; `hata_turleri.py` hata türüne göre döküm verir, `esik_tara.py` sıralayıcının eşiğini tarar |
 | `tr_eval.py`, `tests/` | İsteğe bağlı Gemini denetimi ve testleri |
+| `CLAUDE.md` | Projeyi devralacak geliştirici (ya da Claude Code) için notlar: kurallar, tuzaklar, sıradaki işler |
 
 ## Modelleri yeniden eğitmek
 
