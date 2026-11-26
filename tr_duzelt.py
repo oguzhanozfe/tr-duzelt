@@ -540,6 +540,34 @@ def _ekle_sil(s, k):
 
 
 _UNLU = frozenset('aeıioöuü')
+_KALIN, _INCE = 'aıou', 'eiöü'
+
+
+def _unlu_yerlestir(w, en_cok=2):
+    """Düşürülmüş ünlüleri geri koyma denemeleri: snn -> senin, zayflayaym -> zayıflayayım, kardeslermzdn ->
+    kardeşlerimizden (sonra aksan). Ünlü yalnızca iki ünsüzün arasına ya da sondaki ünsüzden önce, en çok `en_cok`
+    yere konur; ünlü, en yakın ünlünün kalınlık/incelik grubundan seçilir (ünlü yoksa ikisi de denenir).
+    Çok sayıda biçim üretir; çağıran dağarcıkta olmayanları eler."""
+    def secenek(t, k):
+        yakin = next((h for h in reversed(t[:k]) if h in _UNLU), None) or next((h for h in t[k:] if h in _UNLU), None)
+        if yakin is None:
+            return _KALIN + _INCE
+        return _KALIN if yakin in _KALIN else _INCE
+
+    def yerler(t):
+        return [k for k in range(1, len(t)) if t[k - 1] not in _UNLU and t[k] not in _UNLU]
+
+    out, sinir = set(), [w]
+    for _ in range(en_cok):
+        yeni = set()
+        for t in sinir:
+            for k in yerler(t):
+                for u in secenek(t, k):
+                    yeni.add(t[:k] + u + t[k:])
+        out |= yeni
+        sinir = yeni
+    return out
+
 
 
 def _ekle(b, j):
@@ -585,8 +613,6 @@ OZNITELIK_ADLARI = (
     + ['deasciifier_aday', 'deasciifier_ayni'])
 # İsteğe bağlı (--bert): BERTurk'ün maskeli dil modeli puanı. Bütün cümleye bakar; 2-gram modeli yalnızca yandaki kelimeye.
 BERT_OZNITELIKLER = ['bert_pll', 'bert_ort', 'bert_kazanc', 'bert_sonsal', 'bert_sira']
-# Taban sıralayıcının en iyi adaya verdiği olasılık bu aralıktaysa BERT'e de sorulur; dışındaysa karar taban sıralayıcınındır
-BELIRSIZ_ALT, BELIRSIZ_UST = 0.05, 0.98
 # BERT kipinde de/da ayırmanın eşiği genel eşikten bu kadar düşük. Geliştirme tweetlerinde (eşik 0,8): fark 0 -> %74,7 /
 # %2,8 / %0,24; 0,2 -> %75,1 / %2,8 / %0,28 (bende -> ben de); 0,3 -> %75,2 / %2,8 / %0,29. Temiz metinde bozma değişmedi.
 BERT_AYIRMA_FARK = 0.2
@@ -691,7 +717,7 @@ class Siralayici:
 
 
 class YazimDuzeltici:
-    def __init__(self, lm, siralayici=None, bert=None, taban=None):
+    def __init__(self, lm, siralayici=None, bert=None):
         """siralayici: öğrenilmiş aday sıralayıcının (siralayici.json) yolu; yoksa elle ayarlı güven kuralları çalışır.
         bert: BertPuan; verilirse adaylara BERT öznitelikleri de eklenir (sıralayıcı da onlarla eğitilmiş olmalı)."""
         from pkg_resources import resource_filename
@@ -719,13 +745,10 @@ class YazimDuzeltici:
         self.tablo = {}
         self.siralayici = None
         self.bert = bert
-        self.taban = None       # BERT kipinde: BERT'e ne zaman sorulacağına karar veren BERT'siz sıralayıcı
         if siralayici and os.path.exists(siralayici):
             self.siralayici = Siralayici(siralayici)
             if self.siralayici.bert != (bert is not None):
                 raise ValueError('%s %s eğitilmiş' % (siralayici, 'BERT ile' if self.siralayici.bert else 'BERT olmadan'))
-            if bert is not None and taban and os.path.exists(taban):
-                self.taban = Siralayici(taban)
             self._tablo_yukle(resource_filename)
 
     def _tablo_yukle(self, resource_filename):
@@ -980,6 +1003,20 @@ class YazimDuzeltici:
             for c in secilen:
                 ekle(c, duzenleme_maliyeti(w, c) + (C_OZEL if "'" in c else 0.0)
                      + (C_ILK_HARF if c[0] != w[0] else 0.0), 'yazım')
+        if genis and not YABANCI_HARF & set(w) and (not kisa or not any(h in _UNLU for h in w)) and len(w) <= 14:
+            # ünlüsü düşmüş yazım (snn, zayflayaym): ünlüyü geri koy, Türkçe karakteri de dene; yalnızca dağarcıktaki
+            # ve çözümlenen biçim aday olur, kararı sıralayıcı verir
+            for f in _unlu_yerlestir(w):
+                for c in {f, self._deasciify(f)}:
+                    if c not in C and (c,) not in C and self.lm.idx(c) > 0 and self.duzgun(c):
+                        ekle(c, duzenleme_maliyeti(w, c), 'konuşma dili')
+            # geçersiz kelime = gövde + bağlaç: sanada -> sana da, degilde -> değil de
+            for ek, ayri in (('de', 'de'), ('da', 'da'), ('te', 'de'), ('ta', 'da'), ('ki', 'ki')):
+                govde = w[:-2]
+                if w.endswith(ek) and len(govde) >= 2:
+                    for g in [govde] + sum(self.konusma_dili(govde), []):
+                        if self.duzgun(g) and self.lm.idx(g) > 0:
+                            ekle((g, ayri), C_AYIR_EK + duzenleme_maliyeti(govde, g), 'ayırma')
         m = _SORU_EKI.match(w)
         if m and len(m.group(1)) >= 3:
             if self.duzgun(m.group(1)):                      # atarmısınız -> atar mısınız
@@ -1236,29 +1273,15 @@ class YazimDuzeltici:
         "doğru kelime bu mu?" olasılığı hesaplanır; kelimenin kendisinden farklı en iyi aday, olasılığı hem eşiği
         hem de "olduğu gibi bırak" seçeneğini geçiyorsa uygulanır. Eşik yükseldikçe daha az ama daha emin düzeltir."""
         esik = self.siralayici.esik
-        tum = [(i, s_) for i, s_ in self.aday_satirlari(kelimeler, sonuc, bert=self.taban is None)
+        tum = [(i, s_) for i, s_ in self.aday_satirlari(kelimeler, sonuc)
                if sonuc[i][1] != 'sözlük']   # elle yazılmış kural tablosundan gelen düzeltme kesindir
-        olas = {}
-        if self.taban is not None:
-            # BERT yalnızca taban sıralayıcının emin olmadığı kelimelere sorulur: işlemcide asıl maliyet o
-            belirsiz = []
-            for i, satirlar in tum:
-                p = self.taban.olasilik([v for _, v in satirlar])
-                ayni = (kelimeler[i],)
-                p_en = max((pi for (c, _), pi in zip(satirlar, p) if c != ayni), default=0.0)
-                if BELIRSIZ_ALT <= p_en <= BELIRSIZ_UST:
-                    belirsiz.append((i, satirlar))
-                else:
-                    olas[i] = p
-            if belirsiz:
-                self._bert_oznitelikleri(kelimeler, sonuc, belirsiz)
         for i, satirlar in tum:
-            p = olas.get(i) or self.siralayici.olasilik([v for _, v in satirlar])
+            p = self.siralayici.olasilik([v for _, v in satirlar])
             ayni = (kelimeler[i],)
             p_ayni = max((pi for (c, _), pi in zip(satirlar, p) if c == ayni), default=0.0)
             en_iyi, p_en = max(((c, pi) for (c, _), pi in zip(satirlar, p) if c != ayni), key=lambda x: x[1])
             # BERT kipinde de/da ayırma (bende -> ben de) bağlama bakılarak verilmiş bir karar: kendi eşiği var
-            esik_i = esik - BERT_AYIRMA_FARK if self.taban is not None and len(en_iyi) == 2                 and en_iyi[1] in ('de', 'da', 'ki') else esik
+            esik_i = esik - BERT_AYIRMA_FARK if self.bert is not None and len(en_iyi) == 2                 and en_iyi[1] in ('de', 'da', 'ki') else esik
             if p_en >= esik_i and p_en > p_ayni:
                 sonuc[i] = (en_iyi, self.adaylar(kelimeler[i], genis=True)[en_iyi][1])
             else:
@@ -1592,7 +1615,7 @@ class Duzeltici:
         self.lm = DilModeli()
         klasor = os.path.dirname(os.path.abspath(model_yolu))
         self.yazim = YazimDuzeltici(self.lm, os.path.join(klasor, 'siralayici_bert.json' if bert else 'siralayici.json'),
-                                    BertPuan() if bert else None, os.path.join(klasor, 'siralayici.json'))
+                                    BertPuan() if bert else None)
         self.nokta = Noktalayici(model_yolu, self.lm, self.yazim.morph)
         if bert:
             yol = os.path.join(klasor, 'noktalama_bert')

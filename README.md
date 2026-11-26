@@ -30,12 +30,12 @@ Bu bir prototiptir. Neyi ne kadar yapabildiği ve **yapamadığı** ölçümleri
 
 | Girdi | Çıktı |
 |---|---|
-| bugün okula gitmedim çünki hastaydım annem beni doktora götürdü doktor bişey yok dedi ama ben hala kötü hissediyorum yarın sınavım var napcam bilmiyorum ankarada hava çok soğuk | Bugün okula gitmedim çünkü hastaydım. Annem beni doktora götürdü. Doktor bir şey yok dedi. Ama ben hala kötü hissediyorum. Yarın sınavım var ne yapacağım bilmiyorum. Ankara'da hava çok soğuk. |
+| bugün okula gitmedim çünki hastaydım annem beni doktora götürdü doktor bişey yok dedi ama ben hala kötü hissediyorum yarın sınavım var napcam bilmiyorum ankarada hava çok soğuk | Bugün okula gitmedim çünkü hastaydım. Annem beni doktora götürdü. Doktor bir şey yok dedi. Ama ben hala kötü hissediyorum. Yarın sınavım var. Ne yapacağım bilmiyorum. Ankara'da hava çok soğuk. |
 | kardeşim 3 mayısta doğdu o zamanlar izmirde yaşıyorduk babam bir fabrikada çalışıyordu | Kardeşim 3 Mayıs'ta doğdu. O zamanlar İzmir'de yaşıyorduk. Babam bir fabrikada çalışıyordu. |
 | herkez 1994de doğmuş gibi davranıyo yanlız ben 2000li yılların çocuğuyum | Herkes 1994'te doğmuş gibi davranıyor. Yalnız ben 2000'li yılların çocuğuyum. |
 | dun aksam arkadaslarimla sinemaya gittik film cok guzeldi sonra yemek yedik eve gec geldim | Dün akşam arkadaşlarımla sinemaya gittik. Film çok güzeldi. Sonra yemek yedik. Eve geç geldim. |
-| dün arkadaşım ahmetle buluştuk o bana yeni telefonunu gösterdi çok beğendim bende almak istiyorum ama param yok | Dün arkadaşım Ahmet'le buluştuk. O bana yeni telefonunu gösterdi. Çok beğendim bende almak istiyorum ama param yok. |
-| benım arkadasım dıye geldıııı ama cooook yoruldummm yaaa, boyle olmaz kii | Benim arkadaşım diye geldi ama çok yoruldum. Yaaa, böyle olmaz ki. |
+| dün arkadaşım ahmetle buluştuk o bana yeni telefonunu gösterdi çok beğendim bende almak istiyorum ama param yok | Dün arkadaşım Ahmet'le buluştuk. O bana yeni telefonunu gösterdi. Çok beğendim. Bende almak istiyorum ama param yok. |
+| benım arkadasım dıye geldıııı ama cooook yoruldummm yaaa, boyle olmaz kii | Benim arkadaşım diye geldi ama çok yoruldum yaaa, böyle olmaz ki. |
 | bu aksam mac var here we go again diyoruz ama cringe olmasin bro | Bu akşam maç var. Here we go again diyoruz ama cringe olmasın bro. |
 
 Son iki satır düzelticinin huyunu gösteriyor: `yaaa` kısaltılmadı çünkü emin olamadı; İngilizce kısma hiç dokunmadı.
@@ -63,7 +63,7 @@ GİRDİ
   tatlımmm         -> tatlım             [konuşma dili]  adaylar: tatlım (konuşma dili)
   cok              -> çok                [aksan]  adaylar: çok (aksan)
   guzeldi          -> güzeldi            [aksan]  adaylar: güzeldi (aksan)
-  tmm              -> tamam              [sözlük]  adaylar: tamam (sözlük), taam (tablo), tam (tablo)
+  tmm              -> tamam              [sözlük]  adaylar: tamam (sözlük), taam (tablo), tam (tablo), temim (konuşma dili)
 
 3. DURAK: noktalama ([.] [,] [?] = modelin eklediği işaret)
   bugün 3 mayıs'ta ankarada buluştuk[.] tatlım çok güzeldi[.] tamam mı[?]
@@ -147,19 +147,20 @@ GİRDİ
   oldum            =  korundu            adaylar: öldüm (aksan)
 
 3. DURAK: noktalama ([.] [,] [?] = modelin eklediği işaret)
-  aslan kaçtı[.] ormana sonra bulduk[.] vwovv oldum[.] here we go again dedik[.]
+  aslan kaçtı ormana[.] sonra bulduk[.] vwovv oldum[.] here we go again dedik[.]
 
 4. DURAK: büyük harf ve kesme işareti
-  aslan -> Aslan, ormana -> Ormana, vwovv -> Vwovv, here -> Here
+  aslan -> Aslan, sonra -> Sonra, vwovv -> Vwovv, here -> Here
 
 ÇIKTI
-  Aslan kaçtı. Ormana sonra bulduk. Vwovv oldum. Here we go again dedik.
+  Aslan kaçtı ormana. Sonra bulduk. Vwovv oldum. Here we go again dedik.
 ```
 
 - `orma na` ve `son ra` birleştirildi. İki parça da tek başına kelime değilse ve birleşince geçerli bir kelime çıkıyorsa bu güvenli bir düzeltmedir.
 - `vwovv` için hiç aday yok; olduğu gibi kaldı.
 - `oldum` için `öldüm` adayı vardı ama sıralayıcı ikna olmadı; kelime korundu. Doğrusu da bu.
 - `here we go again` yabancı bir cümle; hiçbirine dokunulmadı.
+- Noktalama "Aslan kaçtı ormana. Sonra bulduk." diye doğru bölündü. Dökümler varsayılan (BERT) kipte üretildi: noktalamayı BERTurk etiketleyicisi koyuyor. Klasik kipte (`--klasik`) CRF koyar ve bu cümleyi "Aslan kaçtı. Ormana…" diye yanlış böler.
 
 Bu davranış bir kullanıcı testinden çıktı ([issue #2](https://github.com/oguzhanozfe/tr-duzelt/issues/2)): ilk sürüm benzer bir girdide `orma na` parçalarını "Orda Na" yapıyor, `here we go again` içindeki kelimelere büyük harf koyuyordu.
 
@@ -180,8 +181,8 @@ Her seçim ölçülerek yapıldı. Ölçüm verisi: gerçek insanların yazdığ
 | tr-duzelt, ilk sürüm | %62,8 | %10,7 | %1,39 |
 | tr-duzelt, elle ayarlı kurallar (sıralayıcısız) | %67,3 | %5,9 | %0,45 |
 | tr-duzelt, öğrenilmiş sıralayıcı (25 Kasım) | %73,7 | %4,1 | %0,42 |
-| tr-duzelt `--klasik`: + kural son geçişi, yeni adaylar, eşik 0,8; BERT yok | %73,6 | %2,6 | %0,20 |
-| **tr-duzelt, şimdiki (varsayılan): belirsiz kelimede BERTurk'e de sorar** | **%76,1** | **%2,2** | **%0,27** |
+| tr-duzelt `--klasik`: + kural son geçişi, yeni adaylar, eşik 0,8; BERT yok | %73,9 | %2,5 | %0,20 |
+| **tr-duzelt, şimdiki (varsayılan): adayları BERTurk'e de sorar** | **%77,5** | **%2,2** | **%0,25** |
 
 Tek tek gerekçeler:
 
@@ -210,13 +211,13 @@ Kelimenin ne demek istediğini anlamak için daha küçük ve daha uygun bir sin
 
 Yukarıdaki tablo gerçek veriydi. Bir de temiz cümleleri **bilerek bozup** geri düzeltmeyi deniyoruz; böylece her hata türünü ayrı ayrı görebiliyoruz (464 cümle, UD Turkish-IMST test bölümü):
 
-| Test (düzeltilen / yanlış düzeltilen) | İlk sürüm | Zemberek normalleştirici | tr-duzelt (şimdiki) |
+| Test (düzeltilen / yanlış düzeltilen) | İlk sürüm | Zemberek normalleştirici | tr-duzelt (şimdiki, BERT) |
 |---|---|---|---|
-| Cümlede tek yazım hatası | %90 / %10 | %75 / %23 | **%80 / %2** |
-| Cümlede üç yazım hatası | %91 / %8 | %74 / %23 | **%82 / %2** |
-| Ortasından bölünmüş kelime (`orma na`) | %0 / hepsi | %70 / %28 | **%88 / %2** |
-| Yoğun gürültü: hepsi bir arada + araya İngilizce | %74 / %21 | %71 / %23 | **%82 / %2** |
-| Araya giren İngilizce: bozulan kelime | %1,50 | %3,08 | **%0,11** |
+| Cümlede tek yazım hatası | %90 / %10 | %75 / %23 | **%87 / %2** |
+| Cümlede üç yazım hatası | %91 / %8 | %74 / %23 | **%87 / %1** |
+| Ortasından bölünmüş kelime (`orma na`) | %0 / hepsi | %70 / %28 | **%88 / %1** |
+| Yoğun gürültü: hepsi bir arada + araya İngilizce | %74 / %21 | %71 / %23 | **%86 / %1** |
+| Araya giren İngilizce: bozulan kelime | %1,50 | %3,08 | **%0,14** |
 | Temiz metin: bozulan kelime | %0,32 | %1,32 | **%0,12** |
 
 Okurken bilinmesi gerekenler:
@@ -257,21 +258,21 @@ Hazır BERT modeli kendi model kartında nokta için 0,96 bildiriyor ama burada 
 
 torch ve transformers kuruluysa düzeltici BERT kipinde çalışır. `--klasik` onu kapatır. Kurulu değilse uyarı verip klasik kipe geçer. BERT kipi iki şeyi değiştirir. İkisi de [BERTurk](https://huggingface.co/dbmdz/bert-base-turkish-cased) üzerine kurulu. BERTurk, milyarlarca kelimelik Türkçe metinle eğitilmiş, cümlenin tamamına bakan bir dil modeli (110 milyon parametre). Sohbet modeli değil: metin üretmez, yalnızca puan verir.
 
-1. **Kelime seçimi.** Klasik sıralayıcı yalnızca yandaki kelimelere bakabiliyor. `olum` mu `ölüm` mü `oğlum` mu, `bende` mi `ben de` mi? Bunu çoğu zaman cümlenin geri kalanı söyler. BERT kipinde, klasik sıralayıcının **emin olamadığı** kelimelerde her aday cümlenin içine konup BERTurk'e sorulur: "Bu cümlede bu kelime ne kadar olası?" Bu puan sıralayıcıya beş yeni ipucu olarak girer. Sıralayıcı bu ipuçlarıyla yeniden eğitildi (`siralayici_bert.json`). Emin olunan kelimelere BERT sorulmaz. Bütün kelimelere sormak geliştirme tweetlerinde aynı sonucu verdi, yalnızca daha yavaştı.
+1. **Kelime seçimi.** Klasik sıralayıcı yalnızca yandaki kelimelere bakabiliyor. `olum` mu `ölüm` mü `oğlum` mu, `bende` mi `ben de` mi? Bunu çoğu zaman cümlenin geri kalanı söyler. BERT kipinde, birden çok adayı olan her kelimede her aday cümlenin içine konup BERTurk'e sorulur: "Bu cümlede bu kelime ne kadar olası?" Bu puan sıralayıcıya beş yeni ipucu olarak girer. Sıralayıcı bu ipuçlarıyla eğitildi (`siralayici_bert.json`; ~25 bin temiz cümlenin yapay olarak bozulmuş hâlleri: gazete, roman, turizm yorumları, kurgu).
 2. **Noktalama.** CRF'in yerine BERTurk üzerine eğittiğimiz noktalama etiketleyicisi (`noktalama_bert/`). Büyük harfi yine CRF verir. Virgülü ancak %70'ten, soru işaretini %60'tan eminse koyar.
 
 Sonuç (gerçek tweetler, test):
 
 | | Düzeltilen | Yanlış düzeltilen | Bozulan |
 |---|---|---|---|
-| **Varsayılan (BERT)** | **%76,1** | **%2,2** | %0,27 |
-| `--temkinli` (eşik 0,95) | %67,6 | **%1,6** | %0,17 |
-| `--klasik` | %73,6 | %2,6 | %0,20 |
-| `--klasik --temkinli` | %63,3 | %1,7 | %0,13 |
+| **Varsayılan (BERT)** | **%77,5** | **%2,2** | %0,25 |
+| `--temkinli` (eşik 0,95) | %68,5 | **%1,7** | %0,18 |
+| `--klasik` | %73,9 | %2,5 | %0,20 |
+| `--klasik --temkinli` | %63,4 | %1,7 | %0,13 |
 
-Test tweetlerinde BERT kipi daha çok ve daha az yanlış düzeltiyor; bozulan doğru kelime biraz daha yüksek (%0,27'ye karşı %0,20). Geliştirme tweetlerinde iki kip yakın (%74,9 / %2,7 / %0,28 ile %74,5 / %2,5 / %0,24). Yani kelime seçimindeki fark ölçüm gürültüsünü pek aşmıyor; en görünür kazancı `bende` → `ben de` gibi bağlam isteyen kararlar. Yapay testlerde fark daha açık: cümlede tek yazım hatası %80'den %85'e, üç yazım hatası %82'den %86'ya. Asıl kazanç noktalamada (yukarıdaki tablo).
+Test tweetlerinde BERT kipi daha çok ve daha az yanlış düzeltiyor; bozulan doğru kelime biraz daha yüksek (%0,25'e karşı %0,20). Geliştirme tweetlerinde de benzer: %76,4 / %2,8 / %0,26 ile %74,7 / %2,5 / %0,24. Yapay testlerde fark daha açık: cümlede tek yazım hatası %80'den %87'ye, üç yazım hatası %82'den %87'ye. Noktalamada fark çok büyük (yukarıdaki tablo).
 
-**Ekran kartı gerekmez.** İşlemcide tam duyarlıkla çalışır, sonuç ekran kartındakiyle birebir aynıdır. (8 bitlik hızlı hesap denendi: 1,7 kat hızlı ama 2.000 tweetin 84'ünde çıktı değişti; doğruluk önce geldiği için kullanılmıyor.) Tek çekirdekte kelime seçimi saniyede ~40 kelime, noktalama ~300 kelime. Ekran kartı varsa kendiliğinden kullanılır.
+**Ekran kartı gerekmez.** İşlemcide tam duyarlıkla çalışır, sonuç ekran kartındakiyle birebir aynıdır. (8 bitlik hızlı hesap denendi: 1,7 kat hızlı ama 2.000 tweetin 84'ünde çıktı değişti; doğruluk önce geldiği için kullanılmıyor.) Yavaştır: 8 süreçle saniyede ~85 kelime (klasik kipte ~300). Ekran kartı varsa kendiliğinden kullanılır.
 
 Kurulum:
 
@@ -296,7 +297,7 @@ Klasör yoksa noktalama CRF'le yapılır, kelime seçimi yine BERT'li çalışı
 - **de/da ve ki.** `bende → ben de` artık bazen düzeliyor, ama güvenilir değil: gerçek tweetlerde bitişik yazılmış kelime hatalarının yaklaşık yarısı düzeltiliyor.
 - **Birden çok harfi yanlış kelimeler.** `dokmusa` (dolmuşa) gibi iki harfi birden yanlış kelimeler için aday üretilemiyor; kelime korunur.
 - **Virgül.** Model yalnızca çok emin olduğunda virgül koyar; eksik virgül çok kalır.
-- **Devrik cümle, konuşma, liste.** Noktalama modeli düz anlatımda iyi, bunlarda zayıf. `Aslan kaçtı ormana` cümlesini `Aslan kaçtı. Ormana…` diye bölebilir.
+- **Devrik cümle, konuşma, liste.** Noktalama modeli düz anlatımda iyi, bunlarda zayıf. Klasik kip `Aslan kaçtı ormana` cümlesini `Aslan kaçtı. Ormana…` diye bölebilir; BERT kipi bu örneği doğru yapıyor.
 - **Paragraf.** Denenen yöntem rastgele bölmekten iyi çıkmadı; kodda duruyor ama kapalı (`--paragraf`).
 - **Hız.** `zemberek-python` saf Python olduğu için yavaş: açılış yaklaşık 20 saniye, sonra tek süreçte saniyede kabaca 40 kelime (bütün aşamalar). Büyük dökümler için `--toplu` birden çok süreç kullanır; süreler [Kullanım](#kullanım) bölümünde.
 
@@ -408,31 +409,31 @@ python tr_duzelt.py --toplu dokum.txt --cikti duzeltilmis.txt --klasik     # BER
 
 | Kip | Süreç | Saniyede satır | 100 bin metin | 200 bin metin |
 |---|---|---|---|---|
-| Varsayılan (BERT), yalnızca işlemci | 8 | 14 | ~2 saat | ~4 saat |
+| Varsayılan (BERT), yalnızca işlemci | 8 | 10 | ~2,8 saat | ~5,7 saat |
 | `--klasik` | 8 | 37 | ~45 dk | ~1,5 saat |
 | `--klasik` | 3 (dizüstü gibi) | 15 | ~1,8 saat | ~3,6 saat |
 
-Metinleriniz daha uzunsa süre kelime sayısıyla orantılı uzar (8 süreçle saniyede BERT kipinde ~120, klasik kipte ~300 kelime).
+Metinleriniz daha uzunsa süre kelime sayısıyla orantılı uzar (8 süreçle saniyede BERT kipinde ~85, klasik kipte ~300 kelime).
 
 Kendi yazdığımız 20 düzeltilmemiş metin ve iki kipin çıktısı `ornekler/` klasöründe (`girdi.txt`; `cikti.txt` klasik, `cikti_bert.txt` BERT). Bu metinler bu sürümde eklenen kuralları (`olum`, `ordayim`, `hersey`, `giriyorm`, `bi kac`) göstermek için yazıldı; asıl kanıt yukarıdaki gerçek tweet testi. `cikti_bert.txt` depoda olmayan `noktalama_bert/` modeliyle üretildi. Bir kaçı:
 
 | Girdi | `--klasik` | Varsayılan (BERT) |
 |---|---|---|
-| herkez bu filmi izlemis bende izlemek istiyorum ama vaktim yok | Herkes bu filmi izlemiş bende izlemek istiyorum ama vaktim yok. | Herkes bu filmi izlemiş. Ben de izlemek istiyorum ama vaktim yok. |
+| olum sen ne diyosun ya ben ordayim diyorum gelmedin | Olum sen ne diyorsun ya ben oradayım. Diyorum gelmedin. | Oğlum sen ne diyorsun ya. Ben oradayım diyorum, gelmedin. |
 | hocam odevi yarina kadar teslim edebilirmiyiz cok yogunuz bu hafta | Hocam ödevi yarına kadar teslim edebilir miyiz? Çok yoğunuz. Bu hafta. | Hocam ödevi yarına kadar teslim edebilir miyiz? Çok yoğunuz bu hafta. |
 | yarin hava nasil olcak bilen varmi yagmur yagicak mi | Yarın hava nasıl olacak bilen var mı? Yağmur yağacak mı? | Yarın hava nasıl olacak? Bilen var mı? Yağmur yağacak mı? |
 | giriyorm simdi toplantiya sonra konusuruz tmm mı | Giriyorum şimdi. Toplantıya sonra konuşuruz tamam mı? | Giriyorum şimdi toplantıya. Sonra konuşuruz tamam mı? |
 
-İlk satır iki kipin farkını gösteriyor: `bende` → `ben de` gibi kararlar bağlam ister; klasik kip emin olamayıp dokunmuyor, BERT kipi cümlenin tamamına bakıp ayırıyor. Hâlâ düzelmeyenler: `alcam` (alacağım), `kardeslerimde` (kardeşlerim de), `haftaici` (hafta içi).
+İki kipin farkı en çok noktalamada ve bağlam isteyen kelimelerde (`olum` → `oğlum`). Hâlâ düzelmeyenler: `alcam` (alacağım), `kardeslerimde` (kardeşlerim de), `haftaici` (hafta içi), uzun cümlede `bende` → `ben de`.
 
 **Ne kadar cesur olsun?** `TR_DUZELT_ESIK` ortam değişkeni sıralayıcının eşiğini değiştirir (varsayılan 0,8; geliştirme tweetlerinde seçildi). Yükseltirseniz daha az ama daha emin düzeltir. Gerçek tweetlerin test bölümünde:
 
 | Eşik | Düzeltilen | Yanlış düzeltilen | Bozulan |
 |---|---|---|---|
-| 0,8 (varsayılan) | %76,1 | %2,2 | %0,27 |
-| 0,95 (`--temkinli`) | %67,6 | %1,6 | %0,17 |
+| 0,8 (varsayılan) | %77,5 | %2,2 | %0,25 |
+| 0,95 (`--temkinli`) | %68,5 | %1,7 | %0,18 |
 
-(BERT kipi. `--klasik` ile: 0,8'de %73,6 / %2,6 / %0,20, 0,95'te %63,3 / %1,7 / %0,13.)
+(BERT kipi. `--klasik` ile: 0,8'de %73,9 / %2,5 / %0,20, 0,95'te %63,4 / %1,7 / %0,13.)
 
 ```powershell
 $env:TR_DUZELT_ESIK = "0.9"      # PowerShell;  Linux/macOS: TR_DUZELT_ESIK=0.9 python tr_duzelt.py ...
@@ -492,7 +493,7 @@ python egit_noktalama.py --trmor2018 trmor2018.train --ud *.conllu \
     --cikti noktalama.crfsuite --test-kitap 14 17
 ```
 
-**BERT kipi:** sıralayıcı için `python egit_siralayici.py --bert` (tablo üretimi BERTurk'ü ekran kartında çalıştırır; tabloyu ayrı süreçlere bölmek için CLAUDE.md'deki komutlar). Noktalama için, yukarıdaki verilerle:
+**BERT kipi:** sıralayıcı için `python egit_siralayici.py --bert --derlem boun-train.conllu tr_kenet-ud-train.conllu tr_penn-ud-train.conllu tr_tourism-ud-train.conllu tr_framenet-ud-train.conllu` (dosyalar yerel yol olarak verilir) (tablo üretimi BERTurk'ü ekran kartında çalıştırır; tabloyu ayrı süreçlere bölmek için CLAUDE.md'deki komutlar). Noktalama için, yukarıdaki verilerle:
 
 ```bash
 pip install torch transformers
@@ -508,7 +509,8 @@ Kendi alanınızdan düzgün yazılmış metinle eğitmek hem başarımı artır
 **Modellerin eğitildiği veriler:**
 
 - `noktalama.crfsuite` (≈858 bin kelime): [TrMor2018](https://github.com/ai-ku/TrMor2018) — Dayanık, Akyürek, Yüret (2018), MIT; Universal Dependencies Türkçe ağaç yapıları: [BOUN](https://github.com/UniversalDependencies/UD_Turkish-BOUN), [Kenet](https://github.com/UniversalDependencies/UD_Turkish-Kenet), [Penn](https://github.com/UniversalDependencies/UD_Turkish-Penn), [Tourism](https://github.com/UniversalDependencies/UD_Turkish-Tourism), [FrameNet](https://github.com/UniversalDependencies/UD_Turkish-FrameNet), [GB](https://github.com/UniversalDependencies/UD_Turkish-GB) (CC BY-SA 4.0), [PUD](https://github.com/UniversalDependencies/UD_Turkish-PUD) (CC BY-SA 3.0)
-- `siralayici.json`, `siralayici_bert.json`: UD Turkish-BOUN eğitim bölümünün yapay olarak bozulmuş cümleleri (CC BY-SA 4.0)
+- `siralayici.json`: UD Turkish-BOUN eğitim bölümünün yapay olarak bozulmuş cümleleri (CC BY-SA 4.0)
+- `siralayici_bert.json`: UD Turkish BOUN, Kenet, Penn, Tourism ve FrameNet eğitim bölümlerinin yapay olarak bozulmuş cümleleri (CC BY-SA 4.0)
 - `noktalama_bert/`: `noktalama.crfsuite` ile aynı veriler; temel model [BERTurk](https://huggingface.co/dbmdz/bert-base-turkish-cased) (Stefan Schweter, MDZ Digital Library; MIT)
 
 **Model keşfi ve araştırma:** Esra Bingöl.

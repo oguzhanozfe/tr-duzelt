@@ -1,7 +1,7 @@
 import unittest
 from types import SimpleNamespace
 
-from tr_duzelt import YazimDuzeltici, _uyumlu_soru_eki, _gelecek_zaman
+from tr_duzelt import YazimDuzeltici, _uyumlu_soru_eki, _gelecek_zaman, _unlu_yerlestir
 
 
 class KuralSonGecisTests(unittest.TestCase):
@@ -60,6 +60,17 @@ class GelecekZamanTests(unittest.TestCase):
     def test_ilgisiz_kelimeye_bicim_uretmez(self):
         self.assertEqual(_gelecek_zaman('dicem'), [])      # gövde tek harf: tahmin yürütme
         self.assertEqual(_gelecek_zaman('kitap'), [])
+
+
+class UnluYerlestirTests(unittest.TestCase):
+    def test_dusmus_unlu_geri_konur(self):
+        self.assertIn('senin', _unlu_yerlestir('snn'))
+        self.assertIn('giriyorum', _unlu_yerlestir('giriyorm'))
+        self.assertIn('kalırsın', _unlu_yerlestir('kalrsn'))
+
+    def test_unlu_uyumu_ve_sinir(self):
+        self.assertNotIn('giriyorüm', _unlu_yerlestir('giriyorm'))     # 'o' kalın: ince ünlü (ü) eklenmez
+        self.assertTrue(all(len(b) <= len('kalrsn') + 2 for b in _unlu_yerlestir('kalrsn')))   # en çok iki ünlü
 
 
 if __name__ == '__main__':

@@ -33,8 +33,7 @@ class TrDuzelt:
             siralayici = os.path.join(os.path.dirname(yol), 'siralayici_bert.json' if bert else 'siralayici.json')
         try:
             if bert:
-                self.yazim = self.modul.YazimDuzeltici(self.lm, siralayici or None, self.modul.BertPuan(),
-                                                       os.path.join(os.path.dirname(yol), 'siralayici.json'))
+                self.yazim = self.modul.YazimDuzeltici(self.lm, siralayici or None, self.modul.BertPuan())
             else:
                 self.yazim = self.modul.YazimDuzeltici(self.lm, siralayici or None)
         except TypeError:                      # sıralayıcıdan önceki sürümler

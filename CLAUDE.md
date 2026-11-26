@@ -44,8 +44,8 @@ python olcum/esik_tara.py                                      # sıralayıcı e
 | Dosya | İçerik |
 |---|---|
 | `tr_duzelt.py` | Düzelticinin tamamı (aşağıda) |
-| `siralayici.json` | Öğrenilmiş aday sıralayıcı: 50 öznitelik, eşik 0,8 (26 Kasım'da yeni adaylarla yeniden eğitildi, eşik dev'de seçildi) |
-| `siralayici_bert.json` | BERT kipinin (varsayılan) sıralayıcısı: 50 + 5 BERT özniteliği, eşik 0,8; de/da ayırmada eşik 0,2 düşük (`BERT_AYIRMA_FARK`) |
+| `siralayici.json` | Klasik kipin (`--klasik`) sıralayıcısı: 50 öznitelik, eşik 0,8, yalnızca BOUN ile eğitildi. 26 Kasım'da genişletilmiş veriyle yeniden eğitilen sürüm klasik kipte geliştirmede daha kötü çıktı (0,8'de %74,6/%2,6/%0,26), tutulmadı |
+| `siralayici_bert.json` | BERT kipinin (varsayılan) sıralayıcısı: 50 + 5 BERT özniteliği, eşik 0,8; de/da ayırmada eşik 0,2 düşük (`BERT_AYIRMA_FARK`). Veri: BOUN+Kenet+Penn+Tourism+FrameNet eğitim bölümlerinden 12.000 cümle × 2 bozma |
 | `noktalama_bert/` | BERT kipinin noktalama modeli (BERTurk, 211 MB, depoda DEĞİL, .gitignore'da); `egit_noktalama_bert.py` üretir |
 | `ornekler/` | Kendi yazdığımız 20 metin + iki kipin çıktısı (README'deki örnekler buradan) |
 | `noktalama.crfsuite` | CRF noktalama + büyük harf modeli |
@@ -112,16 +112,16 @@ Gerçek tweetler, test bölümü (1.000 tweet, 2.226 hata):
 | tr-duzelt ilk sürüm | %62,8 | %10,7 | %1,39 | 76,8 |
 | tr-duzelt, sıralayıcısız (`tr-duzelt-sezgisel`) | %67,3 | %5,9 | %0,45 | 84,7 |
 | tr-duzelt, devir anı (`4170084`) | %73,7 | %4,1 | %0,42 | 88,6 |
-| tr-duzelt `--klasik` (eşik 0,8) | **%73,6** | **%2,6** | **%0,20** | **90,5** |
-| **tr-duzelt varsayılan (BERT kipi)** | **%76,1** | **%2,2** | **%0,27** | **91,5** |
-| `--klasik --temkinli` (0,95) | %63,3 | %1,7 | %0,13 | 87,6 |
-| `--temkinli` (BERT, 0,95) | %67,6 | %1,6 | %0,17 | 89,2 |
+| tr-duzelt `--klasik` (eşik 0,8) | %73,9 | %2,5 | %0,20 | 90,6 |
+| **tr-duzelt varsayılan (BERT kipi)** | **%77,5** | **%2,2** | **%0,25** | **91,9** |
+| `--klasik --temkinli` (0,95) | %63,4 | %1,7 | %0,13 | 87,7 |
+| `--temkinli` (BERT, 0,95) | %68,5 | %1,7 | %0,18 | 89,5 |
 
-Geliştirme: varsayılan %74,5 / %2,5 / %0,24; `--bert` %74,9 / %2,7 / %0,28; `--temkinli` 0,95'te %64,0 / %1,9 / %0,19 (0,9'da %70,0 / %2,0 / %0,23; 0,95 seçildi çünkü önceki temkinli kipin bozulanını aşmıyor). Yapay setler (varsayılan / `--bert`): tek hata %80,2 / %84,9 düzeltilen; üç hata %82,2 / %86,0; yoğun %82,3 / %85,4; temiz metinde bozma %0,12 / %0,12; İngilizcede %0,11 / %0,12.
+Geliştirme: BERT %76,4 / %2,8 / %0,26 (0,95'te %69,3 / %1,7 / %0,19); klasik %74,7 / %2,5 / %0,24 (0,95'te %64,1 / %1,9 / %0,19). Yapay setler (klasik / BERT): tek hata %80,2 / %86,6 düzeltilen; üç hata %82,3 / %86,6; yoğun %82,3 / %85,6; temiz metinde bozma %0,12 / %0,12; İngilizcede %0,11 / %0,14.
 
 Noktalama, IMST test F1 (`olcum/noktalama_olc.py`): CRF nokta 0,675 / virgül 0,079 / soru 0,341; `noktalama_bert` (virgül ≥0,7, soru ≥0,6) 0,782 / 0,433 / 0,463, virgül isabeti 0,747.
 
-Hız (yalnızca işlemci, 32 çekirdek, 2.000 tweet, 8,5 kelime/satır): `--toplu` BERT kipi (fp32) 8 süreç 14 satır/sn; `--klasik` 8 süreç 37, 3 süreç 15. Tek iş parçacığında kelime seçimi: klasik ~440, BERT'li kapılı fp32 ~40 kelime/sn; noktalama BERT ~300. Bellek: süreç başına BERT ~2,5 GB, klasik ~1 GB. Kapı (BELIRSIZ_ALT/UST) doğruluğu değiştirmiyor: kapısız BERT geliştirmede 0,8'de birebir aynı.
+Hız (yalnızca işlemci, 32 çekirdek, 2.000 tweet, 8,5 kelime/satır): `--toplu` BERT kipi (kapısız, fp32) 8 süreç 9,8 satır/sn; `--klasik` 8 süreç 37, 3 süreç 15. Bellek: süreç başına BERT ~2,5 GB, klasik ~1 GB.
 
 Bu oturumların commit'leri sırayla: `948a8f7` T5, `95eecd0` noktalama ölçümü, `884582e` + `c0810b1` kural son geçişi, `111223a` aday üretimi + eşik 0,7, `d584c31` BERT kipi, `fb53b0f` toplu mod, `8429a28` noktalama modeli sürümü, `29bb95e` BERT bellek düzeltmesi, ardından aday üretimi 2 + yeniden eğitilen sıralayıcılar (eşik 0,8).
 
@@ -137,6 +137,8 @@ Bu oturumların commit'leri sırayla: `948a8f7` T5, `95eecd0` noktalama ölçüm
 - **Hazır noktalama BERT'i** (`uygarkurt/bert-restore-punctuation-turkish`): cümle sonlarına virgül koyuyor; IMST nokta F1 0,276.
 - **BERTurk uncased** (`dbmdz/bert-base-turkish-128k-uncased`): Türkçe karakterleri siliyor (çok -> cok), PLL ayırt edemiyor. Cased kullan.
 - **BERT'i bütün kelimelere sormak:** işlemcide 13 kelime/sn; kapı (taban olasılığı 0,05-0,98 arası) ile 39, int8 ile 65; doğruluk aynı.
+- **BERT'i yalnızca belirsiz kelimelere sormak (kapı):** hız içindi; geliştirmede kapısızla aynı sonucu veriyordu ama taban sıralayıcı emin olduğunda `ben de` gibi kararları BERT'e hiç göstermiyordu. 26 Kasım'da kaldırıldı (testte kapılı %77,7 / %2,2 / %0,25, kapısız %77,5 / %2,2 / %0,25; seçim geliştirmeye göre yapıldı).
+- **Noktalama modelini gürültülü girdiyle eğitmek** (`egit_noktalama_bert.py --gurultu 0.05`): IMST dev'de kazanç yok (nokta 0,753 -> 0,756, virgül 0,494 -> 0,488, soru düştü). Model %5 gürültüye zaten dayanıklı (`noktalama_olc.py --gurultu 0.05`: nokta 0,753 -> 0,746). v1 tutuldu.
 - **Kelime seçiminde int8:** 1,7 kat hızlı, geliştirme sayıları gürültü kadar farklı, ama 2.000 tweetin 84'ünde çıktı değişti; doğruluk önce geldiği için kaldırıldı (26 Kasım).
 - **Noktalama BERT'inde int8:** 2 kat hızlı ama virgül F1 0,433 -> 0,400; zaten hızlı olduğu için fp32.
 - **Taban sıralayıcıyı yeni tablolarla yeniden eğitmek:** geliştirmede gürültü düzeyinde (0,5'te %74,6 / %3,4 / %0,37, eski model %74,9 / %3,1 / %0,40); eski model tutuldu.
@@ -152,9 +154,15 @@ Bu oturumların commit'leri sırayla: `948a8f7` T5, `95eecd0` noktalama ölçüm
 5. ~~BERT maskeli dil modeli puanı öznitelik~~ — yapıldı (`siralayici_bert.json`, kapılı).
 6. **Kural büyütme döngüsü.** `--eval` çıktısındaki "olası kural" önerileri → elle doğrula → tabloya ekle → `olcum/olc.py`. İstenirse tablolar ayrı bir dosyaya taşınıp, önerilen kuralı otomatik sınayan bir betik yazılabilir (yanlış biçim Zemberek'te geçersiz mi, doğrusu geçerli mi, temiz metinde bozma artıyor mu).
 7. ~~Gelecek zamanın konuşma biçimleri~~ — çoğu yapıldı (`_gelecek_zaman`: başlicak, yagicak, beklicez). Kalan: Zemberek'in geçerli saydığı biçimler (`alcam`), tek harfli gövde (`dicem`). Geçerli görünen kelimeye konuşma dili adayı eklemek denendi, geliştirmede kazanç sıfır, geri alındı.
-8. **Kaçırılan hataların dökümü (26 Kasım, dev, BERT kipi):** %70'inde doğru aday hiç üretilmiyor. Alt gruplar ve örnekler için `kacan.py` / `kacan2.py` türü betikleri (oturum klasöründe kaldı) `olcum/` altına almak işe yarar. Sıradaki en büyük gruplar: 2+ düzenleme (snn, kardeslermzdn), hedefi iki kelime olanlar (napsın → ne yapsın kısmen yapıldı), girdi geçerli kelime (tabi/tabii gibi tercihler, dokunma).
-9. **Kalan yanlış düzeltmelerin bir kısmı ölçüt kaynaklı:** altın veri "bi cok" → "birçok" gibi birleştirmeleri tek düzenleme sayıyor; "bi -> bir" kısmi düzeltmesi yanlış sayılıyor. `../logs/yanlis_dev*.txt` türü dökümü `olcum/` altına betik olarak almak işe yarar.
-10. **Sahibine sorulacaklar:** depoda `LICENSE` yok; depo açıklaması boş. Issue #2 açık, özet yorumu yazıldı; sahibi kendi makinesinde deneyip kapatacak.
+8. **Sıralayıcı eğitimi (26 Kasım):** `egit_siralayici.py --derlem` ile birden çok derlem; `EgitimBozucu` artık her bozma türünü etiketliyor ve eğitimin sonunda "aday kapsamı" yazdırıyor (bozulan kelimenin doğrusu aday listesinde mi). Son çalıştırmada: aksan %98-99, uzatma %97, ünlü düşmesi %89, yazım hatası %82, çoklu ünlü düşmesi %77, tümüyle ünsüz kısaltma %37 (en zayıf yer). Komut:
+   ```bash
+   N=olcum/veri/nokta   # UD dosyaları (README'deki noktalama verisiyle aynı)
+   python egit_siralayici.py --bert --derlem boun-train.conllu $N/tr_kenet-ud-train.conllu $N/tr_penn-ud-train.conllu $N/tr_tourism-ud-train.conllu $N/tr_framenet-ud-train.conllu --cumle 3000 --atla 0 --tur 2 --tohum 2026 --yalniz-tablo --tablo olcum/veri/tablo4/t_0.json   # 4 süreç: --atla 0/3000/6000/9000, tohum 2026/4711/1001/2002
+   python egit_siralayici.py --bert --tablo olcum/veri/tablo4/t_*.json
+   ```
+9. **Kaçırılan hataların dökümü (26 Kasım, dev, BERT kipi):** %70'inde doğru aday hiç üretilmiyor. Alt gruplar ve örnekler için `kacan.py` / `kacan2.py` türü betikleri (oturum klasöründe kaldı) `olcum/` altına almak işe yarar. Sıradaki en büyük gruplar: 2+ düzenleme (snn, kardeslermzdn), hedefi iki kelime olanlar (napsın → ne yapsın kısmen yapıldı), girdi geçerli kelime (tabi/tabii gibi tercihler, dokunma).
+10. **Kalan yanlış düzeltmelerin bir kısmı ölçüt kaynaklı:** altın veri "bi cok" → "birçok" gibi birleştirmeleri tek düzenleme sayıyor; "bi -> bir" kısmi düzeltmesi yanlış sayılıyor. `../logs/yanlis_dev*.txt` türü dökümü `olcum/` altına betik olarak almak işe yarar.
+11. **Sahibine sorulacaklar:** depoda `LICENSE` yok; depo açıklaması boş. Issue #2 açık, özet yorumu yazıldı; sahibi kendi makinesinde deneyip kapatacak.
 
 ## Bilinen hatalar
 
