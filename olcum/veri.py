@@ -75,7 +75,7 @@ def tweetler():
 # ---------------------------------------------------------------- yapay veri
 def temiz_cumleler(ad, en_az=6, en_cok=25):
     out = []
-    with open(dosya(ad), encoding='utf-8') as f:
+    with open(ad if os.path.exists(ad) else dosya(ad), encoding='utf-8') as f:     # yol da verilebilir
         for satir in f:
             if satir.startswith('# text = '):
                 ws = [sade(w) for w in _KELIME.findall(satir[9:])]
