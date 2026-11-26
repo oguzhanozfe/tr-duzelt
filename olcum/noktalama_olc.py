@@ -83,11 +83,16 @@ def main():
     ap.add_argument('--set', nargs='*', default=['imst-dev', 'imst-test'])
     ap.add_argument('--virgul-esik', type=float, default=0.0, help='BERT: virgül için en düşük olasılık')
     ap.add_argument('--soru-esik', type=float, default=0.0, help='BERT: soru işareti için en düşük olasılık')
+    ap.add_argument('--gurultu', type=float, default=0.0,
+                    help='girdi kelimelerinin bu oranını boz (düzelticiden geçmiş ama hata kalmış metni taklit eder)')
     a = ap.parse_args()
     s = kur(a.sistem, a.virgul_esik, a.soru_esik)
     print('sistem: %s' % s.ad)
     for ad in a.set:
         d = diziler(ad)
+        if a.gurultu:
+            from egit_noktalama_bert import gurultulu
+            d = gurultulu(d, a.gurultu, random.Random(5))
         r = degerlendir(d, [s(w) for w, _ in d])
         print('%-10s %5d kelime | ' % (ad, sum(len(w) for w, _ in d)) + ' | '.join(
             '%s P=%.3f R=%.3f F1=%.3f (n=%d)' % ((isaret,) + r[isaret]) for _, isaret in ISARETLER), flush=True)

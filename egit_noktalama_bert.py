@@ -24,6 +24,23 @@ ETIKETLER = ['O', 'C', 'P', 'Q']
 EN_COK_KELIME = 120          # bir dizide en çok bu kadar kelime (512 alt parçanın rahatça altında)
 
 
+def gurultulu(seqs, oran, rng):
+    """Girdi kelimelerinin bir kısmını boz (etiketler aynı): çalışma anında model, yazım hataları tam düzelmemiş metin
+    görür. Türkçe karaktersiz yazım, harf düşmesi, harf tekrarı, yan yana iki harfin yer değiştirmesi."""
+    ascii_ = str.maketrans('çğıöşü', 'cgiosu')
+    out = []
+    for w, e in seqs:
+        yeni = []
+        for x in w:
+            if len(x) >= 3 and x.isalpha() and rng.random() < oran:
+                k = rng.randrange(1, len(x))
+                x = rng.choice([x.translate(ascii_), x[:k] + x[k + 1:], x[:k] + x[k] + x[k:],
+                                x[:k - 1] + x[k] + x[k - 1] + x[k + 1:]]) or x
+            yeni.append(x)
+        out.append((yeni, e))
+    return out
+
+
 def parcala(seqs):
     out = []
     for w, e in seqs:
@@ -42,6 +59,8 @@ def main():
     ap.add_argument('--tur', type=int, default=3, help='kaç tur (her turda cümleler başka pencerelere bölünür)')
     ap.add_argument('--parti', type=int, default=32)
     ap.add_argument('--oran', type=float, default=3e-5)
+    ap.add_argument('--gurultu', type=float, default=0.0,
+                    help='eğitim girdisindeki kelimelerin bu oranını boz (ör. 0.05); test verisi bozulmaz')
     a = ap.parse_args()
 
     import torch
@@ -79,7 +98,8 @@ def main():
                 onceki = wi
         return g.to(cihaz), y.to(cihaz)
 
-    turlar = [parcala(docs_to_sequences(egitim, bos, bos, bos, random.Random(13 + t))) for t in range(a.tur)]
+    turlar = [parcala(gurultulu(docs_to_sequences(egitim, bos, bos, bos, random.Random(13 + t)), a.gurultu,
+                                random.Random(99 + t))) for t in range(a.tur)]
     adim = sum((len(x) + a.parti - 1) // a.parti for x in turlar)
     opt = torch.optim.AdamW(model.parameters(), lr=a.oran, weight_decay=0.01)
     plan = get_linear_schedule_with_warmup(opt, int(0.06 * adim), adim)
